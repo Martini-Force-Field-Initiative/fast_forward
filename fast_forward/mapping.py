@@ -65,7 +65,6 @@ def create_new_universe(universe,
     if res_iter is None:
         res_iter = universe
     for idx, residue in enumerate(res_iter.res_iter()):
-        print(idx, residue.resname, residue.resid)
         for bead in mappings[residue.resname].beads:
             atomnames.append(bead)
             atom_resindex.append(idx)
