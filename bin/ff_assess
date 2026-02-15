@@ -104,6 +104,7 @@ def report_distances(score_matrix, molname, atom_names):
             buff += f"{row[0]:>5} " + " ".join(f"{float(score):>5.2f}" for score in row[1:]) + "\n" # First element is the atom name, rest are scores
 
     off_diag = score_matrix[~np.eye(score_matrix.shape[0], dtype=bool)] # Exclude diagonal (0) for mean and std calculation
+    sem = np.std(off_diag, ddof=1) / np.sqrt(len(off_diag)) # Standard error of the mean
     printable = buff.format(molname=molname,
                             mean=np.mean(off_diag),
                             std=np.std(off_diag)/np.sqrt(off_diag.size),

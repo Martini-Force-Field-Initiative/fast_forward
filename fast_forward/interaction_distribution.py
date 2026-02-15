@@ -2,15 +2,15 @@ import sys
 import numpy as np
 from fast_forward.bonded_functions import NORMAL_FUNCS
 
-INTERACTIONS = {'bonds': {'bins': np.linspace(0, 7, 0.01)
+INTERACTIONS = {'bonds': {'bins': np.arange(0, 7, 0.01)
                           },
-                'constraints': {'bins': np.linspace(0, 7, 0.01)
+                'constraints': {'bins': np.arange(0, 7, 0.01)
                           },
                 'angles': {'bins': np.arange(181)
                            },
                 'dihedrals': {'bins': np.arange(-180, 181)
                               },
-                'distances': {'bins': np.linspace(0, 30, 0.05) # might need adjustment to allow for larger molecules
+                'distances': {'bins': np.arange(0, 30, 0.05) # might need adjustment to allow for larger molecules
                               },
                 'virtual_sitesn': {'interaction_types': {'1': 'virtual_sitesn'},
                                    'array_shape': {'virtual_sitesn': 1}
