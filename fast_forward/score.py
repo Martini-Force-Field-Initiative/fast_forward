@@ -102,7 +102,7 @@ def score_matrix(molname, block, universe, distribution_files, file_prefix: str,
             resid1 = block.nodes[node1]['resid']
             resid2 = block.nodes[node2]['resid']
             atoms = np.array([node1, node2])
-            group_name = f'{resid1}_{resid2}_{name1}_{name2}' # following the naming convention introduced in ITPInteractionMapper
+            group_name = f'{resid1}_{name1}_{resid2}_{name2}' # following the naming convention introduced in ITPInteractionMapper
             indices = find_mol_indices(universe,
                             atoms,
                             molname)
