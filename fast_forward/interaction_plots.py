@@ -8,10 +8,10 @@ import numpy as np
 import pickle
 from .interaction_distribution import INTERACTIONS
 
-X_LABELS={'bonds': 'Distance',
-          'angles': 'Angle',
-          'dihedrals': 'Angle',
-          'distances': 'Distance'}
+X_LABELS={'bonds': 'Distance [Å]',
+          'angles': 'Angle [°]',
+          'dihedrals': 'Angle [°]',
+          'distances': 'Distance [Å]'}
 
 def _plotter(data, atom_list, inter_type, ax):
 
@@ -102,6 +102,13 @@ def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='dist
             _plotter(fit_data[interaction_type][atom_list], atom_list, interaction_type, axarr.flatten()[count])
             count += 1
 
+    # set ylabel
+    if len(axarr.shape) == 2:
+        for ax in axarr[:,0]:
+            ax.set_ylabel('Probability Density')
+    else:
+        axarr[0].set_ylabel('Probability Density')
+
     if save_plot_data:
         pickle.dump(fit_data, open('plot_data.p', 'wb'))
 
@@ -112,7 +119,7 @@ def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='dist
     # need to make room for the title
     fig.subplots_adjust(hspace = 0.3)
 
-    fig.savefig(f'{name}.png')
+    fig.savefig(f'{name}.png', bbox_inches='tight')
 
 def make_matrix_plot(matrix, atom_names, axarr=None, name='score_matrix'):
     '''
@@ -149,7 +156,7 @@ def make_matrix_plot(matrix, atom_names, axarr=None, name='score_matrix'):
     # need to make room for the title
     fig.subplots_adjust(hspace = 0.3)
 
-    fig.savefig(f'{name}.png')
+    fig.savefig(f'{name}.png', bbox_inches='tight')
 
 def make_distances_distribution_plot(plot_data, atom_names, save_plot_data=False, axarr=None, name='distance_distribution_plots'):
     '''
