@@ -50,7 +50,7 @@ def calc_score(ref, test, weights=None, interaction_type='distances'):
     score = hellinger(ref, test) * weights[0] + mean_diff_norm * weights[1] # score is a weighted sum of Hellinger distance and mean difference normalized by standard deviation
     return np.round(score, 2)
 
-def score_matrix(molname, block, universe, file_map: dict, file_prefix: str, hellinger_weight=0.7, include_constrains=False):
+def score_matrix(molname, block, universe, file_map: dict, file_prefix: str, hellinger_weight=0.7, include_constraints=False):
     """
     Compute a pairwise distance score matrix by comparing simulated
     distributions from the trajectory with reference distributions
