@@ -154,7 +154,9 @@ def __main__():
     else:
         u = mda.Universe(args.trajfile, in_memory=True)
 
-    plot_data = defaultdict(dict)
+    if args.plots:
+        plot_data = defaultdict(dict) # initialize only if needed
+
     # if itp file is provided use it
     if args.itp_files:
         ff = vermouth.forcefield.ForceField("dummy")
@@ -200,15 +202,15 @@ def __main__():
                         [args.hellinger_weight, 1-args.hellinger_weight], inter_type
                         )
                     score_dict[inter_type][group_name] = score
-
-                    plot_data[inter_type][group_name] = {"x": reference_data.T[0],
+                    if args.plot_data:
+                        plot_data[inter_type][group_name] = {"x": reference_data.T[0],
                                                          "Reference": reference_data.T[1],
                                                          'Simulated': probs}
         if args.plots:
             make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/interaction_distributions_{molname}')
+        
         report_interactions(h_score_dict, score_dict, args.exclude_outliers)
         
-        del(plot_data)
         # evaluation of distances
         file_map = {}
         for f in distribution_files:
