@@ -50,7 +50,7 @@ def calc_score(ref, test, weights=None, interaction_type='distances'):
     score = hellinger(ref, test) * weights[0] + mean_diff_norm * weights[1] # score is a weighted sum of Hellinger distance and mean difference normalized by standard deviation
     return np.round(score, 2)
 
-def score_matrix(molname, block, universe, distribution_files, file_prefix: str, hellinger_weight=0.7, include_constrains=False):
+def score_matrix(molname, block, universe, file_map: dict, file_prefix: str, hellinger_weight=0.7, include_constrains=False):
     """
     Compute a pairwise distance score matrix by comparing simulated
     distributions from the trajectory with reference distributions
@@ -64,8 +64,8 @@ def score_matrix(molname, block, universe, distribution_files, file_prefix: str,
         Molecule block containing atom definitions and constraints.
     universe : MDAnalysis.Universe
         Universe used to compute simulated pairwise distance distributions.
-    distribution_files : list of Path or str
-        Files containing the reference distributions.
+    file_map : dict
+        Map of reference file names to their paths.
     file_prefix : str
         Prefix used to construct expected reference filenames.
     hellinger_weight : float, optional
@@ -84,14 +84,6 @@ def score_matrix(molname, block, universe, distribution_files, file_prefix: str,
     plot_data = defaultdict(dict)
     natoms = len(block.nodes)
     score_matrix = np.zeros((natoms, natoms))
-
-    file_map = {}
-    for f in distribution_files:
-        p = Path(f)
-        if p.name in file_map:
-            print(f"Warning: duplicate reference file name '{p.name}', using the first one.")
-            continue
-        file_map[p.name] = p
 
     constraints = []
     for constraint in block.interactions['constraints']:
