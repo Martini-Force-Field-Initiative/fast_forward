@@ -8,9 +8,12 @@ folder of the GitHub repository.
 
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
     ff_map_tutorial
+    ff_inter_tutorial
+    ff_assess_tutorial
+
 
 
 

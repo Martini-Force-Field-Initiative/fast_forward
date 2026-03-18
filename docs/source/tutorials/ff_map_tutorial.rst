@@ -27,7 +27,7 @@ essential step in preparing your system. Such a processing could be performed us
     gmx grompp -f mdout.mdp -p vis.top -c vis.gro -o vis.tpr
 
 
-The files in the `data/AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/AA>`_
+The files in the `data/AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/AA>`_
 subfolder called ``atomistic.gro``, ``atomistic.xtc`` and ``atomsitic.tpr`` are readily prepared solvent-free atomistic coordinate,
 trajectory and topology files for use for the rest of this tutorial.
 
@@ -35,7 +35,8 @@ Preparing the map file
 =======================
 
 The solvent free map file can now be used to prepare a map file using the `cgbuilder <https://jbarnoud.github.io/cgbuilder/>`_
-tool. The file can be uploaded, and beads assigned to atoms by clicking on the interactive visualisation pane.
+tool. The coordinate can be uploaded, and beads assigned to atoms by clicking on the interactive visualisation pane.
+Beads should be assigned following the standard Martini mapping rules (covered for example, `here <https://cgmartini.nl/docs/tutorials/Martini3/Small_Molecule_Parametrization/#atom-to-bead-mapping>`_.)
 
 .. figure:: ../figs/cgbuilder.png
 
