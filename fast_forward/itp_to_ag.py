@@ -52,7 +52,7 @@ class ITPInteractionMapper:
         # we ensure we either have molecule types, or we promote res info as such
         res_as_mol(self.universe)
 
-    def get_interactions_group(self, molname, itp_mode=False):
+    def get_interactions_group(self, molname, int_mode=False):
         """
         Iterate over interactions in itp file and return dict of
         grouped indices corresponding to the atoms in universe.
@@ -65,8 +65,8 @@ class ITPInteractionMapper:
         for inter_type in block.interactions:
             for inter in block.interactions[inter_type]:
                 atoms = inter.atoms
-                if itp_mode == "all":
-                    atomnames=[block.nodes[atom]['atomname'] for atom in atoms]
+                if int_mode == "all":
+                    atomnames=[f"{block.nodes[atom]['resid']}_{block.nodes[atom]['atomname']}" for atom in atoms]
                     group = "_".join(atomnames)
                     inter.meta["comment"] = group
                 else:
