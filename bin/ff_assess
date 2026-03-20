@@ -33,7 +33,7 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
     buff = ''
 
     buff += " [ Interaction Distribution Report ]\n"
-    buff += f"   Overall Score : {{mean:.3}} ± {{std:.3}}\n\n"
+    buff += f"   Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
 
     buff += " Interaction Scores:\n"
     buff += " 0 - identical, 1 - no overlap\n\n"
@@ -63,7 +63,7 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
         buff += '\n'
 
     printable = buff.format(mean=np.array(overall_scores).mean(),
-                            std=np.array(overall_scores).std()/np.sqrt(len(overall_scores))
+                            sem=np.array(overall_scores).std()/np.sqrt(len(overall_scores))
                             )
 
     print(printable)
@@ -88,7 +88,7 @@ def report_distances(score_matrix, molname, atom_names):
     score_matrix_report = np.column_stack([[''] + atom_names, score_matrix_report])
     buff = ''
     buff += f" [ Distance Distribution Report for {molname} ]\n "
-    buff += f" Overall Score : {{mean:.3}} ± {{std:.3}}\n\n"
+    buff += f" Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
     buff += f"   Max Score : {{max:.2f}}\n\n"
     buff += " Score guide:\n"
     buff += "   0.0-0.3 : good\n"
@@ -107,7 +107,7 @@ def report_distances(score_matrix, molname, atom_names):
     sem = np.std(off_diag, ddof=1) / np.sqrt(len(off_diag)) # Standard error of the mean
     printable = buff.format(molname=molname,
                             mean=np.mean(off_diag),
-                            std=np.std(off_diag)/np.sqrt(off_diag.size),
+                            sem=sem,
                             max=np.max(score_matrix))
     print(printable)
     with open('report_distances.out', 'w') as fout:
