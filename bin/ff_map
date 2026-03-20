@@ -139,10 +139,10 @@ def main():
 
     if cgsmiles_strs:
         print("INFO - Mapping CGsmiles to universe.")
-        mapped_atoms, bead_idxs, mappings, weights = cgsmiles_to_mapping(init_universe,
-                                                                         cgsmiles_strs,
-                                                                         args.mol_names,
-                                                                         mol_matching=args.cgsorder)
+        mapped_atoms, bead_idxs, mappings, weights, res_iter = cgsmiles_to_mapping(init_universe,
+                                                                                  cgsmiles_strs,
+                                                                                  args.mol_names,
+                                                                                  mol_matching=args.cgsorder)
     n_frames = len(init_universe.trajectory)
     print("INFO - Mapping universe - positions")
     # extract the position array from universe
@@ -165,7 +165,11 @@ def main():
                                               treated_atoms)
 
     print("INFO - Mapping universe - building pos-array")
-    cg_universe = create_new_universe(init_universe, mapped_trajectory, mappings)
+    cg_universe = create_new_universe(init_universe,
+                                      mapped_trajectory,
+                                      mappings,
+                                      n_residues=None,
+                                      res_iter=res_iter)
     # write coordinate
     print("INFO - Writing CG trajectory")
     if args.traj:

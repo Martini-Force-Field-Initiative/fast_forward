@@ -46,6 +46,29 @@ def res_as_mol(universe):
     universe.add_TopologyAttr(moltypes)
     universe.add_TopologyAttr(molnums)
 
+class Residue():
+    """
+    Helper class for a residue.
+    """
+    def __init__(self, resname, resid):
+        self.resname = resname
+        self.resid = resid
+
+class ResidueIter():
+    """
+    Helper class mimicking to iterate over the residues
+    of an mdanlaysis universe.
+    """
+    def __init__(self):
+        self.residues = []
+
+    def add_residue(self, resname, resid):
+        self.residues.append(Residue(resname, resid))
+
+    def res_iter(self):
+        for residue in self.residues:
+            yield residue
+
 class UniverseHandler(mda.Universe):
     """
     Wrapper around mda.Universe which allows for
