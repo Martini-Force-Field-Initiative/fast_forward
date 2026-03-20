@@ -97,7 +97,7 @@ class ITPInteractionMapper:
         for node1, name1 in block.nodes(data='atomname'):
             for node2, name2 in list(block.nodes(data='atomname'))[node1+1:]:
                 atoms = np.array([node1, node2])
-                group = f'{name1}_{name2}' # naming convention with node1 < node2
+                group = f'{block.nodes[node1]["resid"]}_{name1}_{block.nodes[node2]["resid"]}_{name2}' # naming convention with node1 < node2
                 indices = find_mol_indices(self.universe, atoms, molname)
                 old_indices = indices_dict['distances'].get(group, [])
                 indices_dict['distances'][group] = indices + old_indices

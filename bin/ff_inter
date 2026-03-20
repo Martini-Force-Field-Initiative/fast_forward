@@ -19,6 +19,7 @@ Main exe for computing interactions.
 """
 import argparse
 import MDAnalysis as mda
+from tqdm import tqdm
 import vermouth.forcefield
 import sys
 import fast_forward
@@ -158,18 +159,23 @@ def __main__():
                        ff.blocks[molname],
                        command_used=' '.join(sys.argv),
                        )
-        if args.dist_matrix: # calculate and save the timeseries and distributions of all interactions
-            for molname, block in ff.blocks.items():
-                inter_type='distances'
-                interaction_groups = interaction_mapper.get_pairwise_interaction(molname)
-                for group_name, pair_idxs in interaction_groups[inter_type].items():
-                    if not args.distribution_data: # if no path provided, save to current dir, distribution data is always saved
-                        save='.'
-                    else:
-                        save=args.distribution_data
-                    distr = interaction_distribution(u, inter_type, pair_idxs, group_name,
-                                                    args.prefix, save=save)
+        if args.dist_matrix:
+            inter_type = 'distances'
+            total = sum(
+                len(interaction_mapper.get_pairwise_interaction(molname)[inter_type])
+                for molname in ff.blocks
+            )
 
+            with tqdm(total=total, desc='Calculating pairwise distances') as pbar:
+                for molname, block in ff.blocks.items():
+                    interaction_groups = interaction_mapper.get_pairwise_interaction(molname)
+                    for group_name, pair_idxs in interaction_groups[inter_type].items():
+                        save = args.distribution_data if args.distribution_data else '.'
+                        distr = interaction_distribution(
+                            u, inter_type, pair_idxs, group_name, args.prefix, save=save
+                        )
+                        pbar.set_postfix_str(molname)
+                        pbar.update(1)
         # constraint coupling analysis
         for molname, block in ff.blocks.items():
             report_constraint_coupling(u, block, args.estimate_lincs)
