@@ -1,4 +1,6 @@
 import numpy as np
+import re
+from pathlib import Path
 from fast_forward.interaction_distribution import INTERACTIONS, interaction_distribution
 from fast_forward.itp_to_ag import find_mol_indices
 from collections import defaultdict
@@ -48,25 +50,35 @@ def calc_score(ref, test, weights=None, interaction_type='distances'):
     score = hellinger(ref, test) * weights[0] + mean_diff_norm * weights[1] # score is a weighted sum of Hellinger distance and mean difference normalized by standard deviation
     return np.round(score, 2)
 
-def score_matrix(molname, block, universe, distribution_files, hellinger_weight=0.7, include_constraints=False):
+def score_matrix(molname, block, universe, file_map: dict, file_prefix: str, hellinger_weight=0.7, include_constraints=False):
     """
-    Calculate the score matrix for all pairwise distances in the molecule block.
+    Compute a pairwise distance score matrix by comparing simulated
+    distributions from the trajectory with reference distributions
+    loaded from disk.
 
     Parameters
     ----------
     molname : str
-        Name of the molecule.
+        Name of the molecule in the universe.
     block : vermouth.molecule.Block
-        Block containing the molecule information.
+        Molecule block containing atom definitions and constraints.
     universe : MDAnalysis.Universe
-        Universe containing the trajectory data.
-    distribution_files : list of str
-        List of file paths to the distribution data files.
-        These files should contain the reference distributions for the pairwise distances.
-    hellinger_weight: float
-        Weighting of the Hellinger score in the final score.
-    include_constraints: bool
-        include constraints in calculation of score
+        Universe used to compute simulated pairwise distance distributions.
+    file_map : dict
+        Map of reference file names to their paths.
+    file_prefix : str
+        Prefix used to construct expected reference filenames.
+    hellinger_weight : float, optional
+        Weight for the Hellinger distance contribution.
+    include_constrains : bool, optional
+        Whether constrained atom pairs should use normal weights.
+
+    Returns
+    -------
+    score_matrix : ndarray
+        Symmetric matrix of pairwise scores.
+    plot_data : dict
+        Reference and simulated distributions for plotting.
     """
 
     plot_data = defaultdict(dict)
@@ -79,20 +91,27 @@ def score_matrix(molname, block, universe, distribution_files, hellinger_weight=
 
     for node1, name1 in block.nodes(data='atomname'):
         for node2, name2 in list(block.nodes(data='atomname'))[node1+1:]:
+            resid1 = block.nodes[node1]['resid']
+            resid2 = block.nodes[node2]['resid']
             atoms = np.array([node1, node2])
-            group_name = f'{name1}_{name2}' # following the naming convention introduced in ITPInteractionMapper
+            group_name = f'{resid1}_{name1}_{resid2}_{name2}' # following the naming convention introduced in ITPInteractionMapper
             indices = find_mol_indices(universe,
                             atoms,
                             molname)
             distr = interaction_distribution(universe, 'distances', indices)
             # calculate simulation distribution
             probs = distr[0].T[1]
-            # read in reference distribution
+
+            reference_name = f"{file_prefix}{group_name}_distances_distr.dat"
             try:
-                reference_data = np.loadtxt([i for i in distribution_files if group_name in i and 'distances' in i][0])
-            except IndexError:
-                print(f"{group_name} file not found!")
+                ref_file = file_map[reference_name]
+            except KeyError:
+                print(f"{group_name} file not found! If your prefix ends with numbers, this could be the reason.")
+                if file_prefix == "":
+                    print("your prefix is set to the default value: consider changing it to the actual prefix.")
                 continue
+
+            reference_data = np.genfromtxt(ref_file)
             
             # if the distance is constrained, the mean difference is weighted more
             if {node1, node2} in constraints and not include_constraints:
