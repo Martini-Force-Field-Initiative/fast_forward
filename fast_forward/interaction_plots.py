@@ -41,7 +41,7 @@ def _plotter_distance_distribution(data, ax, y_lower_threshold: float = 0.01):
         Must include a key ``"x"`` for the shared x-axis values.
         All other keys correspond to y-data series to be plotted and
         must be array-like and of the same length as ``data["x"]``.
-    ax : matplotlib.axes.Axes
+    ax : :class:`matplotlib.axes._axes.Axes`
         Axes object on which the curves will be plotted.
     y_lower_threshold : float, optional
         Fraction of each curve's maximum used to determine the
@@ -77,7 +77,7 @@ def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='dist
     fit_data: dict
         Dictionary containing distributions and fitting parameters for interactions.
         Nested as {interaction_type: {group_name: {'data': distribution, 'fitted_params': list(params)}}
-    axarr: matplotlib.pyplot.Figure.axes
+    axarr: :class:`matplotlib.axes._axes.Axes`
         array of axes to plot the fitted distributions on
     save_plot_data: bool
         if True, save the underlying data for plots as a pickle file
@@ -126,11 +126,11 @@ def make_matrix_plot(matrix, atom_names, axarr=None, name='score_matrix'):
 
     Parameters
     ----------
-    matrix: np.ndarray
+    matrix: :class:`~numpy.ndarray`
         Quatratic 2D array representing the matrix
     atom_names: list
         List of atom names corresponding to the rows and columns of the matrix
-    axarr: matplotlib.pyplot.Figure.axes
+    axarr: :class:`matplotlib.axes._axes.Axes`
         array of axes to plot the fitted distributions on
     name: str
         name of the output file (default: distribution_plots)
@@ -163,11 +163,11 @@ def make_distances_distribution_plot(plot_data, atom_names, save_plot_data=False
 
     Parameters
     ----------
-    matrix: np.ndarray
+    matrix: :class:`~numpy.ndarray`
         Quatratic 2D array representing the matrix
     atom_names: list
         List of atom names corresponding to the rows and columns of the matrix
-    axarr: matplotlib.pyplot.Figure.axes
+    axarr: :class:`matplotlib.axes._axes.Axes`
         array of axes to plot the fitted distributions on
     name: str
         name of the output file (default: distribution_plots)

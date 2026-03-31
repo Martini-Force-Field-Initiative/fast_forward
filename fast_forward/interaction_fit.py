@@ -43,9 +43,9 @@ def _gaussian_fitter(x, y, initial_center, initial_sigma, initial_amplitude):
 
     Parameters
     ----------
-    x: np.array
+    x: :class:`~numpy.ndarray`
         x of data
-    y: np.array
+    y: :class:`~numpy.ndarray`
         y of data
     initial_center: dict
         dictionary of values for lmfit to use as starting parameters
@@ -127,7 +127,7 @@ class InteractionFitter:
         Fit bonds
         Parameters
         ----------
-        data: np.array
+        data: :class:`~numpy.ndarray`
             histogram of bond data
         group_name: str
             names of the atoms involved in the interaction joined by a "_"
@@ -160,7 +160,7 @@ class InteractionFitter:
         Fit angles
         Parameters
         ----------
-        data: np.array
+        data: :class:`~numpy.ndarray`
             histogram of bond data
         group_name: str
             names of the atoms involved in the interaction joined by a "_"
@@ -211,9 +211,9 @@ class InteractionFitter:
         ----------
         params: lmfit.Parameters
             Parameters object for fit
-        x: np.array
+        x: :class:`~numpy.ndarray`
             x variable for dihedral data
-        data: np.array
+        data: :class:`~numpy.ndarray`
             probability data for dihedral distribution
 
         Returns
@@ -231,7 +231,7 @@ class InteractionFitter:
 
         Parameters
         ----------
-        data: np.array
+        data: :class:`~numpy.ndarray`
             histogram of bond data
         group_name: str
             names of the atoms involved in the interaction joined by a "_"
@@ -512,7 +512,7 @@ class InteractionFitter:
 
         Parameters
         ----------
-        data: np.array
+        data: :class:`~numpy.ndarray`
             histogram of input data
         atoms: list
             (lists of) atom indices involved in the given interaction

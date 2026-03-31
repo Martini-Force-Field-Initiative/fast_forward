@@ -16,13 +16,14 @@ def find_mol_indices(universe, atoms, moltype):
 
     Parameters
     ----------
-    universe: mda.Universe
-    atoms: list[int]
+    universe: :class:`~MDAnalysis.core.universe.Universe`
+    atoms: list
     moltype: str
 
     Returns
     -------
-    list[numpy.array(dtype=int)]
+    list
+        list of :class:`~numpy.ndarray`
     """
     mol_atoms = universe.select_atoms(f'moltype {moltype}')
     n_mols = len(np.unique(mol_atoms.molnums))
@@ -43,9 +44,11 @@ class ITPInteractionMapper:
         """
         Parameters
         ----------
-        universe: mda.Universe
-        blocks: list[vermouth.molecule.Block]
-        molnames: list[str]
+        universe: :class:`~MDAnalysis.core.universe.Universe`
+        blocks: list
+            list of :class:`~vermouth.molecule.Block`
+        molnames: list
+            list of molecule names
         """
         self.universe = universe
         self.blocks = dict(zip(molnames, blocks))

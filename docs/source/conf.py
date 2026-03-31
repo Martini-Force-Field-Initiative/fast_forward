@@ -182,9 +182,10 @@ texinfo_documents = [
 
 # -- Extension configuration -------------------------------------------------
 apidoc_module_dir = '../../fast_forward'
-# apidoc_output_dir = 'api'
-# apidoc_separate_modules = True
-# apidoc_excluded_paths = ['tests', 'redistributed']
+apidoc_output_dir = 'api'
+apidoc_separate_modules = True
+apidoc_excluded_paths = ['tests', 'redistributed']
+apidoc_extra_args = ['--force']
 
 autodoc_inherit_docstrings = False
 autoclass_content = 'both'
@@ -204,10 +205,12 @@ napoleon_type_aliases = {
 intersphinx_mapping = {
     'python': ('https://docs.python.org', None),
     'networkx': ('https://networkx.github.io/documentation/latest', None),
-    'numpy': ('https://docs.scipy.org/doc/numpy', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference', None),
     'matplotlib': ('https://matplotlib.org/stable', None),
-    'rdkit': ('https://www.rdkit.org/docs/', None)
+    'rdkit': ('https://www.rdkit.org/docs/', None),
+    "MDAnalysis": ("https://docs.mdanalysis.org/stable/", None),
+    'vermouth': ("https://vermouth-martinize.readthedocs.io/en/latest/", None)
 }
 
 

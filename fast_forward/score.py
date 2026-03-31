@@ -19,10 +19,9 @@ def calc_score(ref, test, weights=None, interaction_type='distances'):
     normalized by the standard deviation of the reference distribution. If mean is outside of the standard deviation
     of the reference distribution, it is capped at 1.
 
-    ----------
-    ref : numpy 1D-array
+    ref : np.ndarray
         Reference distribution.
-    test : numpy 1D-array
+    test : np.ndarray
         Test distribution.
     weights : list
         Weights with which to calculate the final score. Should be ordered [Hellinger weight, non-Hellinger weight]
@@ -60,18 +59,18 @@ def score_matrix(molname, block, universe, file_map: dict, file_prefix: str, hel
     ----------
     molname : str
         Name of the molecule in the universe.
-    block : vermouth.molecule.Block
+    block : :class:`~vermouth.molecule.Block`
         Molecule block containing atom definitions and constraints.
-    universe : MDAnalysis.Universe
+    universe : :class:`~MDAnalysis.core.universe.Universe`
         Universe used to compute simulated pairwise distance distributions.
     file_map : dict
         Map of reference file names to their paths.
     file_prefix : str
         Prefix used to construct expected reference filenames.
-    hellinger_weight : float, optional
-        Weight for the Hellinger distance contribution.
-    include_constrains : bool, optional
-        Whether constrained atom pairs should use normal weights.
+    hellinger_weight : float
+        Optional. Weight for the Hellinger distance contribution.
+    include_constraints : bool
+        Optional. Whether constrained atom pairs should use normal weights.
 
     Returns
     -------
