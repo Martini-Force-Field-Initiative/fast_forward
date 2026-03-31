@@ -181,7 +181,7 @@ texinfo_documents = [
 
 
 # -- Extension configuration -------------------------------------------------
-# apidoc_module_dir = '../../fast_forward'
+apidoc_module_dir = '../../fast_forward'
 # apidoc_output_dir = 'api'
 # apidoc_separate_modules = True
 # apidoc_excluded_paths = ['tests', 'redistributed']
