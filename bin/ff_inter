@@ -82,9 +82,9 @@ def __main__():
                         help='Maximum multiplicity of dihedral to try stacking during dihedral fitting')
     parser.add_argument('-dihedral-scaling', dest='dihedral_scaling', type=int, default=1e3,
                         help='Scale factor for strength of proper dihedral terms from fit to potential')
-    parser.add_argument('-itp-mode', dest="itp_mode", nargs="?", choices=[None, "comments", "all"],
-                        default=None, const="comments",
-                        help="Use only interactions written into itp already. Will use only commented interactions by default, or all interactions if 'all' is specified.")
+    parser.add_argument('-interactions', dest="int_mode", choices=["guess", "comments", "all"],
+                        default="comments",
+                        help="Interactions (angles and dihedrals) to fit. Will use only commented interactions in itp by default, or all interactions if 'all' is specified. Will guess interactions from the bonds if 'guess' is specified.")
     parser.add_argument('-dist-matrix', default=False, action="store_true",
                         dest="dist_matrix", help="Save text files with time series and distribution data for all pairwise bead distances")
     parser.add_argument('-lincs', default=False, action="store_true",
@@ -118,15 +118,20 @@ def __main__():
             # check for virtualsites
             vs_constructors = virtualsite_atoms(block)
             # calculate distributions for interaction
-            if args.itp_mode == 'all':
+            if args.int_mode == 'guess':
                 guess_interactions(block)
-            interaction_groups, initial_parameters, block_indices = interaction_mapper.get_interactions_group(molname, args.itp_mode)
+            interaction_groups, initial_parameters, block_indices = interaction_mapper.get_interactions_group(molname, args.int_mode)
 
             fitter.dihedrals = interaction_groups # save dihedrals in fitter to later check if angles are part of dihedrals
 
             if not interaction_groups:
                 print(f"WARNING: No interactions found in block {molname}. None will be fitted for this molecule.")
-                print("\t Add them by commenting relevant lines in the itp file, or let fast_forward identify interactions by omitting -itp-only.")
+                if args.int_mode == 'comments':
+                    print("\t Add them by commenting relevant lines in the itp file, use -interactions all, or -interactions guess.")
+                elif args.int_mode == 'all':
+                    print("\t Add them to the itp file, or use interactions guess.")
+                else:
+                    print("\t Check the formatting of the itp file.")
                 continue
             for inter_name in RECOGNISED_INTERACTIONS:
                 for (group_name, pair_idxs), (parameter_type) in zip(interaction_groups[inter_name].items(), initial_parameters[inter_name].values()):
