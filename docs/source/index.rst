@@ -27,3 +27,11 @@ Contents
     ff_map
     ff_inter
     ff_assess
+
+API Reference
+=============
+
+.. toctree::
+   :maxdepth: 2
+
+   api/modules

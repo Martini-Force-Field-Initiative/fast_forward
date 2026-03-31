@@ -12,13 +12,13 @@ def compute_coupling(u, constraints):
 
     Parameters
     ----------
-    u: Universe
-    constraints: list of Interaction objects (constraints)
-        List of constraints in the system 
+    u: :class:`~MDAnalysis.core.universe.Universe`
+    constraints: list
+        List of constraints in the system
 
     Returns
     -------
-    A: np.ndarray
+    A: :class:`~numpy.ndarray`
         Constraint coupling matrix
     '''
     
@@ -69,9 +69,10 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
 
     Parameters
     ----------
-    block: vermouth.molecule.block
+    block: :class:`~vermouth.molecule.Block`
         Block containing the molecule of interest.
-    estimate_lincs: bool, optional
+    estimate_lincs: bool
+        optional.
         Whether to report the estimated LINCS order required for the constraints, defaults to False
     '''
 

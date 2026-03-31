@@ -28,15 +28,15 @@ def create_new_universe(universe, mapped_trajectory, mappings):
 
     Parameters
     -----------
-    universe :class:`pycgmap.universe_handler.UniverseHandler`
-    mapped_trajectory: np.ndarray
+    universe :class:`fast_forward.universe_handler.UniverseHandler`
+    mapped_trajectory: :class:`~numpy.ndarray`
         coordiante array with shape (n_frames, n_atoms, 3)
-    mappings: dict[:class:`pycgmap.map_parser.Mapping`]
-        a dict of resname, mapping object
+    mappings: dict
+        a dict of resname, mapping object :class:`~fast_forward.map_file_parers.Mapping`
 
     Returns
     --------
-    :class:`MDAnalysis.core.universe`
+    :class:`~MDAnalysis.core.universe.Universe`
         the new universe that ties all information
     """
     # copy the dimensions array

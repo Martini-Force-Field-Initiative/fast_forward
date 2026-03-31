@@ -65,8 +65,8 @@ class MapDirector(SectionLineParser):
         Returns
         -------
         object
-            The result of calling :meth:`finalize_section`, which is called
-            if a section ends.
+            The result of calling :meth:`~vermouth.parser_utils.SectionLineParser.finalize_section`,
+            which is called if a section ends.
 
         Raises
         ------
