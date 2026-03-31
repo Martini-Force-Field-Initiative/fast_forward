@@ -19,7 +19,6 @@ Main exe for computing interactions.
 """
 import argparse
 import MDAnalysis as mda
-from tqdm import tqdm
 import vermouth.forcefield
 import sys
 import fast_forward
