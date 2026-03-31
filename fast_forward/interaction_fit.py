@@ -90,11 +90,13 @@ def _periodic_gaussian_generator(x, c, s, a):
     for k in range(-terms, terms+1):
         y += np.exp(-0.5 * ((x - c + k * period) / s)**2)
     return y * a
-
 class InteractionFitter:
     """
     Class to fit interactions
     """
+
+    interactions_dict: defaultdict  # <-- Add this line
+
     def __init__(self, precision, temperature, constraint_converter,
                  max_dihedrals, dihedral_scaling):
         '''
@@ -109,8 +111,6 @@ class InteractionFitter:
             threshold above which to convert bonds to constraints
         max_dihedrals: int
             maximum number of dihedrals to fit proper dihedrals with
-        interactions_dict: :class:`~collections.defaultdict`
-            dictionary for interactions, keyed by interaction type.
         '''
         self.__dihedrals = None
         self.precision = precision
