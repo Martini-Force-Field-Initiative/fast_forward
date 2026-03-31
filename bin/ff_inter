@@ -21,6 +21,7 @@ import argparse
 import MDAnalysis as mda
 import vermouth.forcefield
 import sys
+from tqdm import tqdm
 import fast_forward
 from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp, guess_interactions
