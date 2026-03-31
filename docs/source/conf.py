@@ -206,7 +206,6 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org', None),
     'networkx': ('https://networkx.github.io/documentation/latest', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
-    'scipy': ('https://docs.scipy.org/doc/scipy/objects.inv', None),
     'matplotlib': ('https://matplotlib.org/stable', None),
     'rdkit': ('https://www.rdkit.org/docs/', None),
     "MDAnalysis": ("https://docs.mdanalysis.org/stable/", None),
