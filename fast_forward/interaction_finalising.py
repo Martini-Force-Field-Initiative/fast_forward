@@ -40,7 +40,8 @@ def interaction_finalising(block, fitted_interactions):
     ----------
     block: :class:`~vermouth.molecule.Block`
         Input block analysed. Modified in place.
-    fitted_interactions: :attr:`~fast_forward.interaction_fit.InteractionFitter.interactions_dict`
+    fitted_interactions: dict 
+        see fast_forward.interaction_fit.InteractionFitter.interactions_dict
         Dictionary of fitted interactions to be assigned into the block
 
     """
