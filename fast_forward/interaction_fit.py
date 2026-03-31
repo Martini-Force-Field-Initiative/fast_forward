@@ -109,6 +109,8 @@ class InteractionFitter:
             threshold above which to convert bonds to constraints
         max_dihedrals: int
             maximum number of dihedrals to fit proper dihedrals with
+        interactions_dict: :class:`~collections.defaultdict`
+            dictionary for interactions, keyed by interaction type.
         '''
         self.__dihedrals = None
         self.precision = precision
