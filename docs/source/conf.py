@@ -204,8 +204,8 @@ napoleon_type_aliases = {
 intersphinx_mapping = {
     'python': ('https://docs.python.org', None),
     'networkx': ('https://networkx.github.io/documentation/latest', None),
-    'numpy': ('http://docs.scipy.org/doc/numpy', None),
-    'scipy': ('http://docs.scipy.org/doc/scipy/reference', None),
+    'numpy': ('https://docs.scipy.org/doc/numpy', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/reference', None),
     'matplotlib': ('https://matplotlib.org/stable', None),
     'rdkit': ('https://www.rdkit.org/docs/', None)
 }
