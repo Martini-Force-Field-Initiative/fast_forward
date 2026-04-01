@@ -45,10 +45,43 @@ folder, we have given some default values to the bond parameters for now; they d
 in the first instance. The most important aspect of this topology file is that it
 has been annotated with comments in the bonds, indicating how the interactions are grouped.
 For our GSH molecule, because we assume that each interaction is unique, they each get
-a different annotation. This may be different for a molecule like a polymer, where we have
-repeated interactions between monomeric units. In this case, the same grouping can be
-indicated in the comments, which will then average over `all` interactions in the
-group to generate the final parameters.
+a different annotation.
+
+.. admonition:: Using repeated or common interactions
+
+    This may be different for a molecule like a polymer, where we have
+    repeated interactions between monomeric units. In this case, the same grouping can be
+    indicated in the comments, which will then average over `all` interactions in the
+    group to generate the final parameters.
+
+    If for example we have the following trimer molecule, consisting of 3 monomers which
+    have a simple one bead side chain:
+
+    .. code-block::
+
+        [ atoms ]
+        1 P4   1 RES BB  1  0.0
+        2 SC1  1 RES SC1 2  0.0
+        3 P4   1 RES BB  3  0.0
+        4 SC1  1 RES SC1 4  0.0
+        5 P4   1 RES BB  5  0.0
+        6 SC1  1 RES SC1 6  0.0
+
+        [ bonds ]
+        ;;; backbone-backbone bonds
+        1 3 1 0.3 10000 ; BB_BB
+        3 5 1 0.3 10000 ; BB_BB
+        ;;; backbone-sidechain bonds
+        1 2 1 0.25 5000 ; BB_SC1
+        3 4 1 0.25 5000 ; BB_SC1
+        5 6 1 0.25 5000 ; BB_SC1
+        ...
+
+    In this molecule, we have 2 backbone-backbone bonds, and 3 backbone-sidechain bonds.
+    Were this run through ``ff_inter`` with the annotations shown above, the subprogram
+    would generate average distributions over all the interactions in each annotated group.
+
+
 
 
 Running ``ff_inter``

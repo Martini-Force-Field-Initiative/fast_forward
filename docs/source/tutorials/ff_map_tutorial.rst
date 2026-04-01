@@ -11,8 +11,8 @@ System preparation
 ===================
 
 We start with an atomistic trajectory of the peptide-like molecule, GSH, performed using the Charmm36
-force field. After running a full production trajectory, the trajectory has been stripped of its
-solvent, and centered. Mapping solvent molecules is not currently possible for ``ff_map``, so this is an
+force field. After running a full production trajectory, the trajectory has been pbc corrected and centered.
+Mapping solvent molecules is not currently possible for ``ff_map``, so this is an
 essential step in preparing your system. Such a processing could be performed using the following Gromacs commands:
 
 
@@ -22,10 +22,6 @@ essential step in preparing your system. Such a processing could be performed us
     gmx trjconv -f prod.xtc -s prod.tpr -pbc mol -center -o atomistic.gro -e 0
     gmx trjconv -f prod.xtc -s prod.tpr -pbc mol -center -o atomistic.xtc
 
-    # make a topology file to use with fast-forward
-    # this assumes that W, NA, CL are the last 3 lines of the topology.
-    head -n -3 topol.top > vis.top
-    gmx grompp -f mdout.mdp -p vis.top -c vis.gro -o vis.tpr
 
 
 The files in the `AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/AA>`_
