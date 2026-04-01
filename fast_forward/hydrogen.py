@@ -31,7 +31,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
-Module to reconstruct hydogens from a group of atoms.
+Module to reconstruct hydrogens from a group of atoms.
 Most of this comes from  buildh.readthedocs.io and
 is proted to be compatible with the vermouth way of
 handling molecules.
@@ -54,18 +54,18 @@ def get_CH(atom, helper1, helper2, helper3):
 
     Parameters
     ----------
-    atom : numpy 1D-array
+    atom : :class:`~numpy.ndarray`
         Central atom on which we want to reconstruct the hydrogen.
-    helper1 : numpy 1D-array
+    helper1 : :class:`~numpy.ndarray`
         First neighbor of central atom.
-    helper2 : numpy 1D-array
+    helper2 : :class:`~numpy.ndarray`
         Second neighbor of central atom.
-    helper3 : numpy 1D-array
+    helper3 : :class:`~numpy.ndarray`
         Third neighbor of central atom.
 
     Returns
     -------
-    numpy 1D-array
+    :class:`~numpy.ndarray`
         Coordinates of the rebuilt hydrogen: `([x_H, y_H, z_H])`.
     """
     # Calculate vector along tetrahedron median.
@@ -84,16 +84,17 @@ def get_CH2(atom, helper1, helper2):
 
     Parameters
     ----------
-    atom : numpy 1D-array
+    atom : :class:`~numpy.ndarray`
         Central atom on which we want to reconstruct hydrogens.
-    helper1 : numpy 1D-array
+    helper1 : :class:`~numpy.ndarray`
         Heavy atom before central atom.
-    helper2 : numpy 1D-array
+    helper2 : :class:`~numpy.ndarray`
         Heavy atom after central atom.
 
     Returns
     -------
-    tuple of numpy 1D-arrays
+    tuple
+        tupple of :class:`~numpy.ndarray`
         Coordinates of the two hydrogens:
         `([x_H1, y_H1, z_H1], [x_H2, y_H2, z_H2])`.
     """
@@ -126,16 +127,17 @@ def get_CH3(atom, helper1, helper2):
 
     Parameters
     ----------
-    atom : numpy 1D-array
+    atom : :class:`~numpy.ndarray`
         Central atom on which we want to reconstruct hydrogens.
-    helper1 : numpy 1D-array
+    helper1 : :class:`~numpy.ndarray`
         Heavy atom before central atom.
-    helper2 : numpy 1D-array
+    helper2 : :class:`~numpy.ndarray`
         Heavy atom before helper1 (two atoms away from central atom).
 
     Returns
     -------
-    tuple of numpy 1D-arrays
+    tuple
+        tuple of :class:`~numpy.ndarray`
         Coordinates of the 3 hydrogens:
         `([x_H1, y_H1, z_H1], [x_H2, y_H2, z_H2], [x_H3, y_H3, z_H3])`.
     """
@@ -173,15 +175,16 @@ def get_CH_double_bond(atom, helper1, helper2):
     """Reconstruct the hydrogen of a sp2 carbon.
     Parameters
     ----------
-    atom : numpy 1D-array
+    atom : :class:`~numpy.ndarray`
         Central atom on which we want to reconstruct the hydrogen.
-    helper1 : numpy 1D-array
+    helper1 : :class:`~numpy.ndarray`
         Heavy atom before central atom.
-    helper2 : numpy 1D-array
+    helper2 : :class:`~numpy.ndarray`
         Heavy atom after central atom.
     Returns
     -------
-    tuple of numpy 1D-arrays
+    tuple
+        tuple of :class:`~numpy.ndarray`
         Coordinates of the rebuilt hydrogen: `([x_H, y_H, z_H])`.
     """
     # calc CCC_angle helper1-atom-helper2 (in rad).
@@ -217,7 +220,7 @@ def find_any_bonded_neighbor(atom, bonded_graph, black_list):
 
     Parameters
     ----------
-    atomgroup: :class:`MDAnalysis.atomgroup`
+    atomgroup: :class:`~MDAnalysis.core.groups.AtomGroup`
         atom-group of single atom
     attributes: dict
         a dict of attributes the atom has to full-fill
@@ -225,7 +228,7 @@ def find_any_bonded_neighbor(atom, bonded_graph, black_list):
 
     Returns
     ------
-    atom
+    :class:`~MDAnalysis.core.groups.AtomGroup`
         atomgroup of bonded neighbor
     """
     bond_list = bonded_graph.neighbors(atom)

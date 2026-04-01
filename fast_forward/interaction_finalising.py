@@ -12,8 +12,10 @@ def finalise_interaction_types(block_interactions, fitted_interactions):
 
     Parameters
     ----------
-    block_interactions: dictionary keys of interactions from a block
-    fitted_interactions: dictionary keys of interactions which have been fitted
+    block_interactions: dict
+        keys of interactions from a block
+    fitted_interactions: dict
+        keys of interactions which have been fitted
 
     Returns
     -------
@@ -36,9 +38,10 @@ def interaction_finalising(block, fitted_interactions):
 
     Parameters
     ----------
-    block: vermouth.molecule.block
+    block: :class:`~vermouth.molecule.Block`
         Input block analysed. Modified in place.
-    fitted_interactions: fast_forward.InteractionFitter.interactions_dict
+    fitted_interactions: dict 
+        see fast_forward.interaction_fit.InteractionFitter.interactions_dict
         Dictionary of fitted interactions to be assigned into the block
 
     """

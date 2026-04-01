@@ -4,6 +4,7 @@ Main exe for scoring simulations against mapped trajectories
 """
 import argparse
 from glob import glob
+from pathlib import Path
 import numpy as np
 import MDAnalysis as mda
 import vermouth.forcefield
@@ -32,7 +33,7 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
     buff = ''
 
     buff += " [ Interaction Distribution Report ]\n"
-    buff += f"   Overall Score : {{mean:.2f}} ± {{std:.2f}}\n\n"
+    buff += f"   Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
 
     buff += " Interaction Scores:\n"
     buff += " 0 - identical, 1 - no overlap\n\n"
@@ -49,7 +50,6 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
     else:
         buff += '\n'
 
-    h_scores = []
     overall_scores = []
     for interaction_type in h_score_dict.keys():
         buff += f" {interaction_type} \n"
@@ -59,12 +59,11 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
                 buff += f"\t{atom_group:20s}: {h_score:.2f} ({score:.2f})(excluded)\n"
             else:
                 buff += f"\t{atom_group:20s}: {h_score:.2f} ({score:.2f})\n"
-                h_scores.append(h_score)
                 overall_scores.append(score)
         buff += '\n'
 
     printable = buff.format(mean=np.array(overall_scores).mean(),
-                            std=np.array(overall_scores).std()/np.sqrt(len(overall_scores))
+                            sem=np.array(overall_scores).std()/np.sqrt(len(overall_scores))
                             )
 
     print(printable)
@@ -89,7 +88,7 @@ def report_distances(score_matrix, molname, atom_names):
     score_matrix_report = np.column_stack([[''] + atom_names, score_matrix_report])
     buff = ''
     buff += f" [ Distance Distribution Report for {molname} ]\n "
-    buff += f" Overall Score : {{mean:.2f}} ± {{std:.2f}}\n\n"
+    buff += f" Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
     buff += f"   Max Score : {{max:.2f}}\n\n"
     buff += " Score guide:\n"
     buff += "   0.0-0.3 : good\n"
@@ -105,9 +104,10 @@ def report_distances(score_matrix, molname, atom_names):
             buff += f"{row[0]:>5} " + " ".join(f"{float(score):>5.2f}" for score in row[1:]) + "\n" # First element is the atom name, rest are scores
 
     off_diag = score_matrix[~np.eye(score_matrix.shape[0], dtype=bool)] # Exclude diagonal (0) for mean and std calculation
+    sem = np.std(off_diag, ddof=1) / np.sqrt(len(off_diag)) # Standard error of the mean
     printable = buff.format(molname=molname,
                             mean=np.mean(off_diag),
-                            std=np.std(off_diag)/np.sqrt(off_diag.size),
+                            sem=sem,
                             max=np.max(score_matrix))
     print(printable)
     with open('report_distances.out', 'w') as fout:
@@ -120,6 +120,7 @@ def __main__():
     parser.add_argument('-i', type=str, dest="itp_files", help="itp file", nargs='*')
     parser.add_argument('-d', type=str, dest='reference',
                         help="Path to directory with reference distributions")
+    parser.add_argument('-pref', type=str, dest="prefix", help="common prefix to filename", default="")
     parser.add_argument('-plots', default=None, const=".", nargs="?",
                         dest="plots",
                         help="Make plots comparing distributions. Optionally provide a path (default: current dir)")
@@ -131,13 +132,21 @@ def __main__():
                         help='weight of the Hellinger distance in the distance score')
     parser.add_argument('-include-constraints', default=False, action='store_true', dest='include_constraints',
                         help='fully include constrained distances in the distance score score calculation')
-    parser.add_argument('-dists', default=False, action='store_true',
+    parser.add_argument('-dists', default=None, const=".", nargs="?",
                         dest="distribution_data",
-                        help="Save text files with time series and distribution data for interactions")
+                        help="Save text files with time series and distribution data for interactions. Optionally provide a path (default: current dir).")
 
     args = parser.parse_args()
 
     distribution_files = glob(f'{args.reference}/*distr.dat')
+    # create file map
+    file_map = {}
+    for f in distribution_files:
+        p = Path(f)
+        if p.name in file_map:
+            print(f"Warning: duplicate reference file name '{p.name}', using the first one.")
+            continue
+        file_map[p.name] = p
 
     # load trajectory
     if args.tprfile:
@@ -145,7 +154,9 @@ def __main__():
     else:
         u = mda.Universe(args.trajfile, in_memory=True)
 
-    plot_data = defaultdict(dict)
+    if args.plots:
+        plot_data = defaultdict(dict) # initialize only if needed
+
     # if itp file is provided use it
     if args.itp_files:
         ff = vermouth.forcefield.ForceField("dummy")
@@ -168,42 +179,63 @@ def __main__():
             interaction_groups, _, _ = interaction_mapper.get_interactions_group(molname)
             for inter_type in ['bonds', 'angles', 'dihedrals']:
                 for group_name, pair_idxs in interaction_groups[inter_type].items():
-                    distr, _ = interaction_distribution(u, inter_type, pair_idxs, save=args.distribution_data)
+                    distr, _ = interaction_distribution(u, inter_type, pair_idxs, group_name, args.prefix, save=args.distribution_data)
                     # calculate simulation distribution
                     probs = distr.T[1]
                     # read in reference distribution
+                    reference_name = f"{args.prefix}{group_name}_{inter_type}_distr.dat"
                     try:
-                        reference_data = np.loadtxt([i for i in distribution_files if group_name in i and inter_type in i][0])
-                    except IndexError:
-                        print(f"{group_name} file not found!")
+                        ref_file = file_map[reference_name]
+                    except KeyError:
+                        print(f"{reference_name} file not found!")
+                        if args.prefix == "":
+                            print("your prefix is set to the default value: consider changing it to the actual prefix.")
                         continue
+
+                    reference_data = np.genfromtxt(ref_file)
                     # calculate hellinger distance between simulated and reference distributions
                     h_score = hellinger(probs/probs.sum(), reference_data.T[1] / reference_data.T[1].sum())
                     h_score_dict[inter_type][group_name] = h_score
 
-                    score = calc_score(reference_data.T[1]/ reference_data.T[1].sum(), probs/probs.sum(), [args.hellinger_weight, 1-args.hellinger_weight], inter_type)
+                    score = calc_score(
+                        reference_data.T[1]/ reference_data.T[1].sum(), probs/probs.sum(), 
+                        [args.hellinger_weight, 1-args.hellinger_weight], inter_type
+                        )
                     score_dict[inter_type][group_name] = score
-
-                    plot_data[inter_type][group_name] = {"x": reference_data.T[0],
+                    if args.plot_data:
+                        plot_data[inter_type][group_name] = {"x": reference_data.T[0],
                                                          "Reference": reference_data.T[1],
                                                          'Simulated': probs}
         if args.plots:
             make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/interaction_distributions_{molname}')
+        
         report_interactions(h_score_dict, score_dict, args.exclude_outliers)
         
         # evaluation of distances
-        for molname, block in ff.blocks.items():
-            score_m, plot_data = score_matrix(molname, 
-                                   block, 
-                                   u, 
-                                   distribution_files,
-                                   args.hellinger_weight,
-                                   args.include_constraints)
+        file_map = {}
+        for f in distribution_files:
+            p = Path(f)
+            if p.name in file_map:
+                print(f"Warning: duplicate reference file name '{p.name}', using the first one.")
+                continue
+            file_map[p.name] = p
 
-            atom_names = [name for _, name in block.nodes(data='atomname')]
+        for molname, block in ff.blocks.items():
+            score_m, plot_data = score_matrix(molname=molname, 
+                                   block=block, 
+                                   universe=u, 
+                                   file_map=file_map,
+                                   file_prefix=args.prefix,
+                                   hellinger_weight=args.hellinger_weight,
+                                   include_constraints=args.include_constraints)
+            
+            atom_names = [f'{resid}_{name}' for (_, name), (_, resid) in zip(block.nodes(data='atomname'), block.nodes(data='resid'))]
+
             if args.plots:
                 make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
-                make_distances_distribution_plot(plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}')
-            report_distances(score_m, molname, atom_names)
+                make_distances_distribution_plot(
+                    plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
+                )
 
+            report_distances(score_m, molname, atom_names)
 __main__()

@@ -91,12 +91,12 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
 
     Parameters
     ----------
-    univ: :class:`fast_forward.UniverseHandler`
+    univ: :class:`fast_forward.universe_handler.UniverseHandler`
     cgsmiles_strs: list[str]
     mol_names: list[str]
 
 
-    Retunrs
+    Returns
     -------
     list, list, dict
     """

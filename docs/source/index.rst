@@ -25,4 +25,19 @@ Installation
     ff_map
     ff_inter
     ff_assess
+
+Tutorials
+=========
+.. toctree::
+    :maxdepth: 2
+    
     tutorials/index
+
+API Reference
+=============
+
+.. toctree::
+   :maxdepth: 2
+
+   api/modules
+
