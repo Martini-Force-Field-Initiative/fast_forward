@@ -19,15 +19,16 @@ essential step in preparing your system. Such a processing could be performed us
 .. code-block::
 
     # process the trajectory
-    gmx trjconv -f prod.xtc -s prod.tpr -pbc mol -center -o vis.gro -e 0
-    gmx trjconv -f prod.xtc -s prod.tpr -pbc mol -center -o vis.xtc
+    gmx trjconv -f prod.xtc -s prod.tpr -pbc mol -center -o atomistic.gro -e 0
+    gmx trjconv -f prod.xtc -s prod.tpr -pbc mol -center -o atomistic.xtc
 
     # make a topology file to use with fast-forward
+    # this assumes that W, NA, CL are the last 3 lines of the topology.
     head -n -3 topol.top > vis.top
     gmx grompp -f mdout.mdp -p vis.top -c vis.gro -o vis.tpr
 
 
-The files in the `data/AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/AA>`_
+The files in the `AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/AA>`_
 subfolder called ``atomistic.gro``, ``atomistic.xtc`` and ``atomsitic.tpr`` are readily prepared solvent-free atomistic coordinate,
 trajectory and topology files for use for the rest of this tutorial.
 
@@ -49,7 +50,7 @@ A small modification required is the header directive, which must be changed to 
     [ molecule ]
     LIG GSH
 
-Here, the ``molecule`` directive indicates the name of the molecule in the topology file at atomistic resolution (``LIG``)
+Here, the ``molecule`` directive indicate residue names in the topology file at atomistic resolution (``LIG``)
 and the name at CG resolution (``GSH``).
 
 Mapping the molecule
@@ -64,6 +65,11 @@ With the `.map` file prepared, we can map the system. The trajectory can be mapp
 
 Note that by mapping a trajectory, the first frame is written as a simple coordinate file (``.gro``) also
 with the same file name prefix (in this case, it will be called ``mapped.gro``).
+
+.. admonition:: Use of the ``-mols`` flag
+
+    The ``-mols`` flag here is the ``moleculename`` of the molecule as described in the topology. In this case,
+    the fact that the molecule consists of only one residue, also called ``LIG``, is a coincidence.
 
 The mapped structure could now be viewed in vmd to check that everything is now in place:
 

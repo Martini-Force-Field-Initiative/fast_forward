@@ -78,7 +78,7 @@ As described above, the report contains both the Hellinger distance and the modi
 for each distribution annotated. Similar to ``ff_inter``, the ``-plot-data`` flag can be used for the subprogram to
 also write out the raw data for the plots so that it can be replotted as desired. The report and plots can be
 used to indicate where further optimisation of the model could be targeted. The overall score, calculated as the
-mean of all the individual scores, could be used to report a single value for the fidelity of the model.
+mean of all the individual scores, should be used to report a single value for the fidelity of the model.
 
 
 Distance distribution assessment

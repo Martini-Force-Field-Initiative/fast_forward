@@ -14,7 +14,7 @@ molecule looks at a CG resolution. Fast-Forward has a flexible syntax for this,
 which means that in the first instance, we need only to define the bonds between
 beads in the molecule, from which other bonded interactions can be generated.
 
-What this means in practice is that we can write a Gromacs itp for the new molecule,
+What this means in practice is that we can write ``GROMACS itp files`` for the new molecule
 containing only the ``[ moleculetype ]``, ``[ atoms ]``, and ``[ bonds ]`` directives.
 
 For our GSH molecule, this means the itp file can simply look like this:
@@ -40,7 +40,7 @@ For our GSH molecule, this means the itp file can simply look like this:
     5 6 1 0.300 7500 ; AMD2_CAC2
 
 
-In the above example, also available in the `data <data/AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH>`_
+In the above example, also available in the `data <AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH>`_
 folder, we have given some default values to the bond parameters for now; they do not matter
 in the first instance. The most important aspect of this topology file is that it
 has been annotated with comments in the bonds, indicating how the interactions are grouped.
