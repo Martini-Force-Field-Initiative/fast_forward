@@ -2,9 +2,10 @@
 **************
 
 As previously indicated, ``ff_assess`` is a powerful tool to help assess a new
-CG model's validity against a reference simulation.
+CG model's validity against a reference simulation. This tutorial follows from
+the :doc:`ff_inter_tutorial` tutorial
 
-Prepared simulations of the GSH model are found in the `<assessment <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/assessment>`_
+Prepared simulations of the GSH model are found in the `assessment <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/assessment>`_
 folder of the example directory, if you have not conducted your own simulation.
 
 Assuming something like the following directory structure, we can run ``ff_assess`` using the
