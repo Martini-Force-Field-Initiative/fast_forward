@@ -31,6 +31,6 @@ pip install ./
 ## Documentation
 
 Documentation for fast forward's *ff_map* and *ff_inter* programs
-can be found at LINK
+can be found at https://ffwd.readthedocs.io/en/latest/
 
 
