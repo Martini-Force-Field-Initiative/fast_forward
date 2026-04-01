@@ -40,7 +40,7 @@ For our GSH molecule, this means the itp file can simply look like this:
     5 6 1 0.300 7500 ; AMD2_CAC2
 
 
-In the above example, also available in the `data <AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH>`_
+In the above example, also available in the `AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/AA>`_
 folder, we have given some default values to the bond parameters for now; they do not matter
 in the first instance. The most important aspect of this topology file is that it
 has been annotated with comments in the bonds, indicating how the interactions are grouped.
