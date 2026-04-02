@@ -15,7 +15,7 @@ def itp_writer(molname, block, command_used):
     ----------
     molname: str
         molname for block
-    block: vermouth.molecule.Block
+    block: :class:`~vermouth.molecule.Block`
         The block for which to write the itp
     command_used: str
         Command used to run the program

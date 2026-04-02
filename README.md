@@ -23,7 +23,7 @@ that we use the numba library for parallel acceleration.
 Fast forward can be installed using the following:
 
 ```
-git clone https://github.com/fgrunewald/fast_forward.git
+git clone https://github.com/Martini-Force-Field-Initiative/fast_forward
 cd fast_forward
 pip install ./
 ```
@@ -31,6 +31,6 @@ pip install ./
 ## Documentation
 
 Documentation for fast forward's *ff_map* and *ff_inter* programs
-can be found at LINK
+can be found at https://ffwd.readthedocs.io/en/latest/
 
 

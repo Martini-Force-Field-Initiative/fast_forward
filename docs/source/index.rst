@@ -18,8 +18,6 @@ Installation
     cd fast_forward
     pip install ./
 
-Contents
-========
 
 .. toctree::
     :maxdepth: 2
@@ -28,6 +26,13 @@ Contents
     ff_inter
     ff_assess
 
+Tutorials
+=========
+.. toctree::
+    :maxdepth: 2
+    
+    tutorials/index
+
 API Reference
 =============
 
@@ -35,3 +40,4 @@ API Reference
    :maxdepth: 2
 
    api/modules
+
