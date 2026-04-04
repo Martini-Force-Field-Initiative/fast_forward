@@ -90,6 +90,8 @@ def __main__():
                         dest="dist_matrix", help="Save text files with time series and distribution data for all pairwise bead distances")
     parser.add_argument('-lincs', default=False, action="store_true",
                         dest="estimate_lincs", help="Estimate the LINCS order required for solving the constraints in the molecule(s)")
+    parser.add_argument('-multi-dihedral', default=False, action="store_true",
+                        dest="multi_dihedral", help="Fit multiple dihedral terms on top of each other and ignore penalty")
 
     args = parser.parse_args()
 
@@ -111,7 +113,8 @@ def __main__():
                                    max_dihedrals=args.max_dihedral,
                                    temperature=args.temperature,
                                    precision=args.precision,
-                                   dihedral_scaling=args.dihedral_scaling)
+                                   dihedral_scaling=args.dihedral_scaling,
+                                   disable_aic_penalty=args.multi_dihedral)
         
         interaction_mapper = ITPInteractionMapper(u, ff.blocks.values(), ff.blocks.keys())
         # loop over molecules

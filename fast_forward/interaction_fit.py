@@ -98,7 +98,7 @@ class InteractionFitter:
     interactions_dict: defaultdict  # <-- Add this line
 
     def __init__(self, precision, temperature, constraint_converter,
-                 max_dihedrals, dihedral_scaling):
+                 max_dihedrals, dihedral_scaling, disable_aic_penalty=False):
         '''
 
         Parameters
@@ -111,6 +111,8 @@ class InteractionFitter:
             threshold above which to convert bonds to constraints
         max_dihedrals: int
             maximum number of dihedrals to fit proper dihedrals with
+        disable_aic_penalty: bool
+            if True, disable AIC penalty for dihedral fitting and use all available terms
         '''
         self.__dihedrals = None
         self.precision = precision
@@ -119,6 +121,7 @@ class InteractionFitter:
         self.constraint_converter = constraint_converter
         self.max_dihedrals = max_dihedrals
         self.dihedral_scaling = dihedral_scaling
+        self.disable_aic_penalty = disable_aic_penalty
         # this will store the interactions
         self.interactions_dict = defaultdict(list)
         self.fit_parameters = defaultdict(dict)
@@ -289,7 +292,11 @@ class InteractionFitter:
 
         num_terms = len(best_params) // 3  # Each term has k, n, and x0
 
-        condition0 = best_aic < gaussian_result.aic
+        # If AIC penalty is disabled, always use proper dihedrals with all fitted terms
+        if self.disable_aic_penalty:
+            condition0 = True
+        else:
+            condition0 = best_aic < gaussian_result.aic
         condition1 = np.isclose(gaussian_result.params['sigma'].value, gaussian_result.params['sigma'].max)
 
         # compare the aic values to determine which type of dihedral we have
