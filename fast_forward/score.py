@@ -92,7 +92,7 @@ def score_matrix(molname, block, universe, distribution_files, hellinger_weight=
                 weigths = [hellinger_weight, 1-hellinger_weight]
 
             # calculate score and populate matrix
-            score = calc_score(probs, reference_data.T[1], weigths, interaction_type='distances')
+            score = calc_score(reference_data.T[1], probs, weigths, interaction_type='distances')
             score_matrix[node1, node2] = float(score)
             score_matrix[node2, node1] = float(score)
             plot_data['distances'][group_name] = {"x": reference_data.T[0],

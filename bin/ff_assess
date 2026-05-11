@@ -50,6 +50,7 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
         buff += '\n'
 
     h_scores = []
+    overall_scores = []
     for interaction_type in h_score_dict.keys():
         buff += f" {interaction_type} \n"
         for atom_group, h_score in h_score_dict[interaction_type].items():
@@ -59,10 +60,11 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
             else:
                 buff += f"\t{atom_group:20s}: {h_score:.2f} ({score:.2f})\n"
                 h_scores.append(h_score)
+                overall_scores.append(score)
         buff += '\n'
 
-    printable = buff.format(mean=np.array(h_score).mean(),
-                            std=np.array(h_score).std())
+    printable = buff.format(mean=np.array(overall_scores).mean(),
+                            std=np.array(overall_scores).std())
 
     print(printable)
     with open('report_interactions.out', 'w') as fout:
@@ -178,7 +180,7 @@ def __main__():
                     h_score = hellinger(probs/probs.sum(), reference_data.T[1] / reference_data.T[1].sum())
                     h_score_dict[inter_type][group_name] = h_score
 
-                    score = calc_score(probs/probs.sum(), reference_data.T[1]/ reference_data.T[1].sum(), [args.hellinger_weight, 1-args.hellinger_weight], inter_type)
+                    score = calc_score(reference_data.T[1]/ reference_data.T[1].sum(), probs/probs.sum(), [args.hellinger_weight, 1-args.hellinger_weight], inter_type)
                     score_dict[inter_type][group_name] = score
 
                     plot_data[inter_type][group_name] = {"x": reference_data.T[0],
