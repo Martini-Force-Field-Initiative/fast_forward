@@ -131,6 +131,7 @@ def main():
         mapped_atoms, bead_idxs, weights = forward_map_indices(init_universe,
                                                                mappings)
         cgsmiles_strs = None
+        res_iter = None
     # we do the mapping with cgsmiles
     elif args.cgsmiles_library:
         cgsmiles_strs = load_cgsmiles_library(args.cgsmiles_library)
