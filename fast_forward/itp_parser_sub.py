@@ -26,10 +26,10 @@ class FastForwardITPParser(ITPDirector):
 
     def parse(self, file_handle):
         """
-        Reads lines from `file_handle`, and calls :meth:`dispatch` to find
+        Reads lines from `file_handle`, and calls :meth:`~vermouth.gmx.itp_read.ITPDirector.dispatch` to find
         which method to call to do the actual parsing. Yields the result of
         that call, if it's not `None`.
-        At the end, calls :meth:`finalize`, and yields its results, iff
+        At the end, calls :meth:`~vermouth.gmx.itp_read.ITPDirector.finalize`., and yields its results, iff
         it's not None.
         Parameters
         ----------
@@ -39,7 +39,7 @@ class FastForwardITPParser(ITPDirector):
         ------
         object
             The results of dispatching to parsing methods, and of
-            :meth:`finalize`.
+            :meth:`~vermouth.gmx.itp_read.ITPDirector.finalize`.
         """
         lineno = 0
         for lineno, line in enumerate(file_handle, 1):
@@ -72,7 +72,8 @@ class FastForwardITPParser(ITPDirector):
             The current block we parse
         section: str
             The current section header
-        atom_idxs: list of ints or strings that are valid python slices
+        atom_idxs: list
+            ints or strings that are valid python slices
         """
         # split atoms and parameters
 
@@ -123,7 +124,7 @@ def _matching_angles(angles):
 def guess_interactions(block):
     """
     From the bonds described in a block's interactions, generate all possible angles and dihedrals.
-    -----
+
     block: :class:`vermouth.molecule.Block`
     """
 
@@ -141,11 +142,11 @@ def guess_interactions(block):
     # add dummy interactions to block if they're not already there.
     for i in angles:
         if i not in [[int(j) for j in k.atoms] for k in block.interactions['angles']]:
-            comment = '_'.join([block.nodes[atom]['atomname'] for atom in i])
+            comment = '_'.join([f"{block.nodes[atom]['resid']}_{block.nodes[atom]['atomname']}" for atom in i])
             block.add_interaction('angles', atoms=i,
                                   parameters=['2', '10', '10'], meta={'version': 0, 'comment': comment})
     for i in dihedrals:
         if i not in [[int(j) for j in k.atoms] for k in block.interactions['dihedrals']]:
-            comment = '_'.join([block.nodes[atom]['atomname'] for atom in i])
+            comment = '_'.join([f"{block.nodes[atom]['resid']}_{block.nodes[atom]['atomname']}" for atom in i])
             block.add_interaction('dihedrals', atoms=i,
                                   parameters=['1', '10', '1', '1'], meta={'version': 0, 'comment': comment})

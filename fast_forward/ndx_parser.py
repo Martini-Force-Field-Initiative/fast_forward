@@ -8,25 +8,30 @@ TYPES = {2: "bonds",
 def ndx_to_ag(atoms_or_universe, infile):
     """
     Create MDAnalysis AtomGroups from a Universe and an index file.
+
     Examples
     --------
     .. code-block::
-    u = mda.Universe(TPR, XTC)
-    with open('index.ndx') as infile:
-        for group_name, atom_group in ndx_to_ag(u, infile):
-            print(group_name, atom_group)
+
+        u = mda.Universe(TPR, XTC)
+        with open('index.ndx') as infile:
+            for group_name, atom_group in ndx_to_ag(u, infile):
+                print(group_name, atom_group)
+
     Parameters
     ----------
-    atoms_or_universe: mda.AtomGroup or mda.Universe
+    atoms_or_universe: :class:`~MDAnalysis.core.universe.Universe` or :class:`~MDAnalysis.core.groups.AtomGroup`
         The atoms to select from.
-    infile: file
+    infile: str
         The open index file to read.
+
     Yields
     ------
     group_name: str
         The name of the group as written in the index file.
-    atoms: mda.AtomGroup
+    atoms: :class:`~MDAnalysis.core.groups.AtomGroup`
         An atom group containing the atoms for that group.
+
     """
     with open(infile) as _file:
         lines = _file.readlines()
