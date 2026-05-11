@@ -14,6 +14,7 @@
 import numpy as np
 import numba
 import networkx as nx
+import pysmiles
 from cgsmiles.resolve import MoleculeResolver
 from .map_file_parers import Mapping
 from .universe_handler import ResidueIter
@@ -55,22 +56,38 @@ def find_one_graph_match(graph1, graph2):
     """
 
     def node_match(n1, n2):
-        return n1["element"] == n2['element']
-
-    def edge_match(e1, e2):
-        return e1['order'] == e2['order']
+        for attr in ["element", "hcount", "charge"]:
+            if n1[attr] != n2[attr]:
+                return False
+        return True
 
     if len(graph1) != len(graph2):
         raw_matches = iter([])
     else:
+        pysmiles.remove_explicit_hydrogens(graph1)
+        pysmiles.remove_explicit_hydrogens(graph2)
         GM = nx.isomorphism.GraphMatcher(graph1,
                                          graph2,
-                                         node_match=node_match,
-                                         edge_match=edge_match)
+                                         node_match=node_match)
 
         raw_matches = GM.subgraph_isomorphisms_iter()
     try:
         mapping = next(raw_matches)
+        # we need to add the hatoms
+        pysmiles.add_explicit_hydrogens(graph1)
+        pysmiles.add_explicit_hydrogens(graph2)
+        for node in graph1.nodes:
+            if graph1.nodes.get("element") == "H" and node not in mapping:
+                anchor = list(graph.neighbors(node))[0]
+                hatoms_target = [ node for node in graph1.neighbors(anchor) if graph1.nodes[node]["element"] == "H"]
+                hatoms_ref = [ node for node in graph2.neighbors(mapping[anchor]) if graph2.nodes[node]["element"] == "H"]
+                # this should be enforced by the graph matching
+                # but better to check as the zip could mask issues
+                # when length does not match
+                assert len(hatoms_target) == len(hatoms_ref)
+                hmap = dict(zip(hatoms_target, hatoms_ref))
+                mapping.updte(hmap)
+
     except StopIteration:
         mapping = []
     return mapping
@@ -106,11 +123,12 @@ def get_mappings(cg, univ, _match, mappings):
     for bead in cg.nodes:
         atoms = cg.nodes[bead]['graph'].nodes
         resnames = [univ.atoms[_match[atom]].resname for atom in atoms]
-        resname = _most_common(resnames)
+        common_resname = _most_common(resnames)
+        resname = f"D{bead}"
         resids = [univ.atoms[_match[atom]].resid for atom in atoms]
         resid = _most_common(resids)
         cg.nodes[bead]['resname'] = resname
-        cg.nodes[bead]['resid'] = resid
+        cg.nodes[bead]['resid'] = bead #resid
         mapping = mappings.get(resname, Mapping(resname, resname))
         target_resid = target_resids.get(resname, resid)
         target_resids[resname] = target_resid
@@ -118,11 +136,12 @@ def get_mappings(cg, univ, _match, mappings):
             continue
         for adx, atom in enumerate(atoms):
             weight = np.float32(cg.nodes[bead]['graph'].nodes[atom].get('weight', 1))
-            mapping.add_atom(cg.nodes[bead]["fragname"], #+f"{bead}",
+            mapping.add_atom(cg.nodes[bead]["fragname"]+f"{bead}",
                              _match[atom],
                              atom=univ.atoms[_match[atom]].name,
                              weight=weight)
         mappings[resname] = mapping
+
     return mappings
 
 def _annotate_vs(cg_graph):

@@ -49,11 +49,13 @@ def create_new_universe(universe,
     for fdx, ts in enumerate(universe.trajectory):
         dimensions[fdx, :] = ts.dimensions
 
+    # either we loop over pre-defined residues or the universe ones
+    if res_iter is None:
+        res_iter = universe
+
     # create the universe to be returend
     # initalize some attributes
-    if n_residues is None:
-        n_residues = universe.n_residues
-
+    n_residues = len(list(res_iter.res_iter()))
     n_atoms = mapped_trajectory.shape[1]
     res_seg = np.array([1] * n_residues)
     # to read out these we have to iterate over universe again
@@ -61,16 +63,12 @@ def create_new_universe(universe,
     atomnames = []
     resids = []
     resnames = []
-    # either we loop over pre-defined residues or the universe ones
-    if res_iter is None:
-        res_iter = universe
     for idx, residue in enumerate(res_iter.res_iter()):
         for bead in mappings[residue.resname].beads:
             atomnames.append(bead)
             atom_resindex.append(idx)
         resids.append(idx)
         resnames.append(mappings[residue.resname].to_resname)
-
     # now create the empty universe
     cg_universe = mda.Universe.empty(trajectory=True,
                                      n_atoms=n_atoms,
@@ -87,6 +85,7 @@ def create_new_universe(universe,
     cg_universe.add_TopologyAttr("names", values=atomnames)
     cg_universe.add_TopologyAttr("resnames", values=resnames)
     cg_universe.add_TopologyAttr("resids", values=resids)
+    cg_universe.trajectory[0]
     return cg_universe
 
 def forward_map_indices(universe, mappings):
@@ -148,5 +147,4 @@ def forward_map_positions(mapped_atoms, bead_idxs, weights, positions, n_frames,
             else:
                 new_pos = treat_pos  / treat_count
             new_trajectory[fdx, bead_idx, :] = new_pos
-
     return new_trajectory

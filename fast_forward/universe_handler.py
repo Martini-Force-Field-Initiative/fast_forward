@@ -215,7 +215,7 @@ class UniverseHandler(mda.Universe):
             nx.set_node_attributes(g, dict(zip(molecule.indices, eles)) ,'element')
             pos = [coord for coord in molecule.positions]
             nx.set_node_attributes(g, dict(zip(molecule.indices, pos)) ,'pos')
-            assign_order(g)
+            #assign_order(g)
             mol_graphs[mol_name] = g
         return mol_graphs
 

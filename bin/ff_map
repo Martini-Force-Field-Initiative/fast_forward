@@ -178,21 +178,21 @@ def main():
     else:
         file_extension = "xtc"
 
+    cg_beads = cg_universe.atoms
     if file_extension in ["xtc", "trr"]:
-        cg_beads = cg_universe.atoms
         outpath = pathlib.Path(args.outpath)
         with mda.Writer(str(outpath),
                         multiframe=True,
                         n_atoms=len(cg_universe.atoms)) as mapped:
             for time_step in cg_universe.trajectory:
                 mapped.write(cg_beads)
-
-        # write first frame as gro file
-        with mda.Writer(outpath.stem+'.gro',
-                        multiframe=False,
-                        n_atoms=len(cg_universe.atoms)) as first_frame:
-                        first_frame.box = init_universe.dimensions if isinstance(init_universe.dimensions, np.ndarray) else np.array([7.0, 7.0, 7.0])
-                        first_frame.write(cg_beads) 
+    print("-->",len(cg_beads))
+    # write first frame as gro file
+    with mda.Writer(outpath.stem+'.gro',
+                    multiframe=False,
+                    n_atoms=len(cg_universe.atoms)) as first_frame:
+                    first_frame.box = init_universe.dimensions if isinstance(init_universe.dimensions, np.ndarray) else np.array([7.0, 7.0, 7.0])
+                    first_frame.write(cg_beads) 
 
 if __name__ == '__main__':
     main()
