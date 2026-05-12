@@ -19,6 +19,21 @@ from cgsmiles.resolve import MoleculeResolver
 from .map_file_parers import Mapping
 from .universe_handler import ResidueIter
 
+def remove_explicit_hydrogens(graph):
+    """
+    Returns a subgraph of a molecule sans hydrogen atoms and
+    annotates the number of hydrogen atoms.
+    """
+    not_hnodes = [node for node in graph.nodes if graph.nodes[node]["element"] != "H"]
+    not_h_graph =  graph.subgraph(not_hnodes)
+    for node in not_hnodes:
+        hcount = 0
+        for neighbor in nx.neighbors(graph, node):
+            if graph.nodes[neighbor]["element"] == "H":
+                hcount +=1
+        not_h_graph.nodes[node]["hcount"] = hcount
+    return not_h_graph
+
 def load_cgsmiles_library(filepath):
     """
     Given a file that lists cgsmiles strings,
@@ -56,7 +71,7 @@ def find_one_graph_match(graph1, graph2):
     """
 
     def node_match(n1, n2):
-        for attr in ["element", "hcount", "charge"]:
+        for attr in ["element", "hcount"]:
             if n1[attr] != n2[attr]:
                 return False
         return True
@@ -64,21 +79,19 @@ def find_one_graph_match(graph1, graph2):
     if len(graph1) != len(graph2):
         raw_matches = iter([])
     else:
-        pysmiles.remove_explicit_hydrogens(graph1)
-        pysmiles.remove_explicit_hydrogens(graph2)
-        GM = nx.isomorphism.GraphMatcher(graph1,
-                                         graph2,
+        graph1_no_hatoms = remove_explicit_hydrogens(graph1)
+        graph2_no_hatoms = remove_explicit_hydrogens(graph2)
+        GM = nx.isomorphism.GraphMatcher(graph1_no_hatoms,
+                                         graph2_no_hatoms,
                                          node_match=node_match)
 
         raw_matches = GM.subgraph_isomorphisms_iter()
     try:
         mapping = next(raw_matches)
-        # we need to add the hatoms
-        pysmiles.add_explicit_hydrogens(graph1)
-        pysmiles.add_explicit_hydrogens(graph2)
+        # we need to add the hatoms to the mapping
         for node in graph1.nodes:
-            if graph1.nodes.get("element") == "H" and node not in mapping:
-                anchor = list(graph.neighbors(node))[0]
+            if graph1.nodes[node].get("element") == "H" and node not in mapping:
+                anchor = list(graph1.neighbors(node))[0]
                 hatoms_target = [ node for node in graph1.neighbors(anchor) if graph1.nodes[node]["element"] == "H"]
                 hatoms_ref = [ node for node in graph2.neighbors(mapping[anchor]) if graph2.nodes[node]["element"] == "H"]
                 # this should be enforced by the graph matching
@@ -86,8 +99,7 @@ def find_one_graph_match(graph1, graph2):
                 # when length does not match
                 assert len(hatoms_target) == len(hatoms_ref)
                 hmap = dict(zip(hatoms_target, hatoms_ref))
-                mapping.updte(hmap)
-
+                mapping.update(hmap)
     except StopIteration:
         mapping = []
     return mapping
