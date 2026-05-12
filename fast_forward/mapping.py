@@ -78,6 +78,7 @@ def create_new_universe(universe, mapped_trajectory, mappings):
     cg_universe.add_TopologyAttr("names", values=atomnames)
     cg_universe.add_TopologyAttr("resnames", values=resnames)
     cg_universe.add_TopologyAttr("resids", values=resids)
+    cg_universe.trajectory[0]
     return cg_universe
 
 def forward_map_indices(universe, mappings):
@@ -97,8 +98,8 @@ def forward_map_indices(universe, mappings):
             weights_from_atoms = mapping.atom_weights[bead]
             names = mapping.bead_to_atom[bead]
             atoms = _selector(residue.atoms, idxs, names)
-            weights.append(weights_from_atoms)
-            mapped_atoms.append(atoms.indices)
+            weights.append(numba.typed.List(weights_from_atoms))
+            mapped_atoms.append(numba.typed.List(atoms.indices))
             bead_idxs.append(total_beads)
             total_beads += 1
 
