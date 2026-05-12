@@ -78,6 +78,7 @@ def create_new_universe(universe, mapped_trajectory, mappings):
     cg_universe.add_TopologyAttr("names", values=atomnames)
     cg_universe.add_TopologyAttr("resnames", values=resnames)
     cg_universe.add_TopologyAttr("resids", values=resids)
+    cg_universe.trajectory[0]
     return cg_universe
 
 def forward_map_indices(universe, mappings):
