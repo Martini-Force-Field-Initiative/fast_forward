@@ -105,8 +105,8 @@ def forward_map_indices(universe, mappings):
             weights_from_atoms = mapping.atom_weights[bead]
             names = mapping.bead_to_atom[bead]
             atoms = _selector(residue.atoms, idxs, names)
-            weights.append(weights_from_atoms)
-            mapped_atoms.append(atoms.indices)
+            weights.append(numba.typed.List(weights_from_atoms))
+            mapped_atoms.append(numba.typed.List(atoms.indices))
             bead_idxs.append(total_beads)
             total_beads += 1
 
