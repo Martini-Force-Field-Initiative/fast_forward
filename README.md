@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/327071500.svg)](https://zenodo.org/badge/latestdoi/327071500)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19355099.svg)](https://doi.org/10.5281/zenodo.19355099)
 
 # Fast-Forward
 
