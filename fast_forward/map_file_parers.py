@@ -65,8 +65,8 @@ class MapDirector(SectionLineParser):
         Returns
         -------
         object
-            The result of calling :meth:`finalize_section`, which is called
-            if a section ends.
+            The result of calling :meth:`~vermouth.parser_utils.SectionLineParser.finalize_section`,
+            which is called if a section ends.
 
         Raises
         ------
@@ -133,18 +133,23 @@ class MapDirector(SectionLineParser):
         idx = tokens[0]
         atom = tokens[1]
         beads = tokens[2:]
+        weight = None
         for bead in range(len(beads)):
-            if beads[bead][0] != "!" and beads[bead][0].isalpha():
-                if not beads[bead-1][0].isalpha():
+            if beads[bead][0] != "!" and beads[bead].isalnum():
+                if weight:
                     self.current_mapping.add_atom(idx=idx,
                                                   atom=atom,
                                                   bead=beads[bead],
-                                                  weight=np.float32(beads[bead-1]))
+                                                  weight=weight)
                 else:
                     self.current_mapping.add_atom(idx=idx,
                                                   atom=atom,
                                                   bead=beads[bead],
                                                   weight=np.float32(1.0))
+                weight = None
+            # we are having a weight
+            else:
+                weight = np.float32(beads[bead])
     def finalize(self, lineno=0):
         """
         Called at the end of the file

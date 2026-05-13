@@ -28,15 +28,15 @@ def create_new_universe(universe, mapped_trajectory, mappings):
 
     Parameters
     -----------
-    universe :class:`pycgmap.universe_handler.UniverseHandler`
-    mapped_trajectory: np.ndarray
+    universe :class:`fast_forward.universe_handler.UniverseHandler`
+    mapped_trajectory: :class:`~numpy.ndarray`
         coordiante array with shape (n_frames, n_atoms, 3)
-    mappings: dict[:class:`pycgmap.map_parser.Mapping`]
-        a dict of resname, mapping object
+    mappings: dict
+        a dict of resname, mapping object :class:`~fast_forward.map_file_parers.Mapping`
 
     Returns
     --------
-    :class:`MDAnalysis.core.universe`
+    :class:`~MDAnalysis.core.universe.Universe`
         the new universe that ties all information
     """
     # copy the dimensions array
@@ -78,6 +78,7 @@ def create_new_universe(universe, mapped_trajectory, mappings):
     cg_universe.add_TopologyAttr("names", values=atomnames)
     cg_universe.add_TopologyAttr("resnames", values=resnames)
     cg_universe.add_TopologyAttr("resids", values=resids)
+    cg_universe.trajectory[0]
     return cg_universe
 
 def forward_map_indices(universe, mappings):
@@ -97,8 +98,8 @@ def forward_map_indices(universe, mappings):
             weights_from_atoms = mapping.atom_weights[bead]
             names = mapping.bead_to_atom[bead]
             atoms = _selector(residue.atoms, idxs, names)
-            weights.append(weights_from_atoms)
-            mapped_atoms.append(atoms.indices)
+            weights.append(numba.typed.List(weights_from_atoms))
+            mapped_atoms.append(numba.typed.List(atoms.indices))
             bead_idxs.append(total_beads)
             total_beads += 1
 

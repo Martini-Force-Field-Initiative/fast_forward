@@ -17,7 +17,7 @@ GSH_AA_TPR = TEST_DATA / 'GSH/AA/atomistic.tpr'
 
 GSH_CG_TRAJ = TEST_DATA / 'GSH/CG/mapped.xtc'
 GSH_CG_GRO = TEST_DATA / 'GSH/CG/mapped.gro'
-GSH_CG_TPR = TEST_DATA / 'GSH/interactions/GSH.tpr'
+GSH_CG_TPR = TEST_DATA / 'GSH/interactions/mapped.tpr'
 
 GSH_MAP = TEST_DATA / 'GSH/GSH.map'
 

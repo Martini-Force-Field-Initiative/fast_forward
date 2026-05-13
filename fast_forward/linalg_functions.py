@@ -44,11 +44,11 @@ def _u_vect(vect):
 
     Parameters
     ----------
-    vect: np.array
+    vect: :class:`~numpy.ndarray`
 
     Returns
     -----------
-    np.array
+    :class:`~numpy.ndarray`
     """
     unit_vect = vect/np.linalg.norm(vect)
     return unit_vect
@@ -62,8 +62,8 @@ def _vector_angle(v1, v2):
 
     Parameters
     ----------
-    v1: np.ndarray[n, 3]
-    v2: np.ndarray[n, 3]
+    v1: :class:`~numpy.ndarray`
+    v2: :class:`~numpy.ndarray`
 
     Returns
     ---------
@@ -87,8 +87,8 @@ def _vector_angle_degrees(v1, v2):
 
     Parameters
     ----------
-    v1: np.ndarray[n, 3]
-    v2: np.ndarray[n, 3]
+    v1: :class:`~numpy.ndarray`
+    v2: :class:`~numpy.ndarray`
 
     Returns
     ---------
@@ -107,14 +107,14 @@ def vec2quaternion(vec, theta):
 
     Parameters
     ----------
-    vec : numpy 1D-array
+    vec : :class:`~numpy.ndarray`
         Vector of the quaternion.
     theta : float
         Angle of the quaternion in radian.
 
     Returns
     -------
-    numpy 1D-array
+    :class:`~numpy.ndarray`
         The full quaternion (4 elements).
     """
     w = np.cos(theta/2)
@@ -129,11 +129,13 @@ def calc_rotation_matrix(quaternion):
 
     Parameters
     ----------
-    quaternion : numpy 1D-array of 4 elements.
+    quaternion : :class:`~numpy.ndarray`
+        numpy 1D-array of 4 elements.
 
     Returns
     -------
-    numpy 2D-array (dimension `[3, 3]`)
+    :class:`~numpy.ndarray`
+        numpy 2D-array (dimension `[3, 3]`)
         The rotation matrix.
     """
     # Initialize rotation matrix.
@@ -161,12 +163,13 @@ def apply_rotation(vec_to_rotate, rotation_axis, rad_angle):
     The rotation axis is a vector of 3 elements.
     Parameters
     ----------
-    vec_to_rotate : numpy 1D-array
-    rotation_axis : numpy 1D-array
+    vec_to_rotate : :class:`~numpy.ndarray`
+    rotation_axis : :class:`~numpy.ndarray`
     rad_angle : float
     Returns
     -------
-    numpy 1D-array
+    :class:`~numpy.ndarray`
+        1D array
         The final rotated (normalized) vector.
     """
     # Generate a quaternion of the given angle (in radian).
@@ -191,14 +194,14 @@ def cross_product(A, B):
 
     Parameters
     ----------
-    A : numpy 1D-array
+    A : :class:`~numpy.ndarray`
         A vector of 3 elements.
-    B : numpy 1D-array
+    B : :class:`~numpy.ndarray`
         Another vector of 3 elements.
 
     Returns
     -------
-    numpy 1D-array
+    :class:`~numpy.ndarray`
         Cross product of A^B.
     """
     x = (A[1]*B[2]) - (A[2]*B[1])

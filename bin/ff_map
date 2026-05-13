@@ -168,13 +168,17 @@ def main():
     cg_universe = create_new_universe(init_universe, mapped_trajectory, mappings)
     # write coordinate
     print("INFO - Writing CG trajectory")
-    if args.traj:
-        path = pathlib.Path(args.traj)
-        file_extension = path.suffix.casefold()[1:]
-    else:
-        file_extension = "xtc"
-
-    if file_extension in ["xtc", "trr"]:
+    # these are all the multiframe writes MDAnalysis has
+    mda_traj_formats = list(mda._MULTIFRAME_WRITERS.keys())
+    outpath = pathlib.Path(args.outpath)
+    outpath_extension = outpath.suffix.casefold()[1:]
+    single_frame_outpath = outpath
+    # we have more than a single frame
+    if cg_universe.trajectory.n_frames > 1:
+        if outpath_extension not in mda_traj_formats:
+            msg = (f"Requested output format {outpath_extension} is not known to MDAnalyis "
+                    "or is not a able to write multiple frames.")
+            raise ValueError(msg)
         cg_beads = cg_universe.atoms
         outpath = pathlib.Path(args.outpath)
         with mda.Writer(str(outpath),
@@ -182,13 +186,15 @@ def main():
                         n_atoms=len(cg_universe.atoms)) as mapped:
             for time_step in cg_universe.trajectory:
                 mapped.write(cg_beads)
+        single_frame_outpath = outpath.stem+'.gro'
 
-        # write first frame as gro file
-        with mda.Writer(outpath.stem+'.gro',
-                        multiframe=False,
-                        n_atoms=len(cg_universe.atoms)) as first_frame:
-                        first_frame.box = init_universe.dimensions if isinstance(init_universe.dimensions, np.ndarray) else np.array([7.0, 7.0, 7.0])
-                        first_frame.write(cg_beads) 
+    cg_beads = cg_universe.atoms
+    # write first frame or just single frame
+    with mda.Writer(single_frame_outpath,
+                    multiframe=False,
+                    n_atoms=len(cg_universe.atoms)) as first_frame:
+                    first_frame.box = init_universe.dimensions if isinstance(init_universe.dimensions, np.ndarray) else np.array([7.0, 7.0, 7.0])
+                    first_frame.write(cg_beads) 
 
 if __name__ == '__main__':
     main()

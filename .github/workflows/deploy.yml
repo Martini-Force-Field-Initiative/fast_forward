@@ -1,0 +1,35 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: upload python package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+
+  docs:
+      runs-on: ubuntu-latest
+
+      steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+           python-version: '3.x'
+           cache: pip
+           cache-dependency-path: |
+             **/setup.cfg
+             **/requirements-*.txt
+             **/pyproject.toml
+      - name: Install dependencies
+        run: |
+          pip install --upgrade setuptools pip
+          pip install --upgrade .
+          pip install -r requirements-docs.txt
+
+      - name: Run docs
+        run: |
+          mkdir -p docs/source/_static
+          sphinx-build -WnE -b html docs/source/ docs/build/html
