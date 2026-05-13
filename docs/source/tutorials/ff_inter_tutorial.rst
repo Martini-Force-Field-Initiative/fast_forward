@@ -91,7 +91,7 @@ With the initial topology prepared, we can run the ``ff_inter`` subprogram
 
 .. code-block::
 
-    ff_inter -f mapped.xtc -s mapped.tpr -i GSH.itp -itp-mode all -max-dihedral 10 -plots -dist-matrix
+    ff_inter -f mapped.xtc -s mapped.tpr -i GSH.itp -interactions guess -max-dihedral 10 -plots -dist-matrix
 
 The above command should result in four sets of files:
 

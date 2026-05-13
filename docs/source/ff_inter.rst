@@ -37,9 +37,9 @@ Options
                         Maximum multiplicity of dihedral to try stacking during dihedral fitting (default: 10)
   -dihedral-scaling DIHEDRAL_SCALING
                         Scale factor for strength of proper dihedral terms from fit to potential (default: 1000.0)
-  -itp-mode [{None,comments,all}]
-                        Use only interactions written into itp already. Will use only commented interactions by
-                        default, or all interactions if 'all' is specified. (default: None)
+  -interactions {guess,comments,all}
+                        Interactions (angles and dihedrals) to fit. Will use only commented interactions in itp by default, or all interactions if 'all' is specified. Will guess interactions from the bonds if 'guess'
+                        is specified. (default: comments)
   -dist-matrix          Save text files with time series and distribution data for all pairwise bead distances
                         (default: False)
   -lincs                Estimate the LINCS order required for solving the constraints in the molecule(s) (default:
@@ -50,7 +50,7 @@ Example
 
 .. code-block::
 
-    ff_inter -f mapped.xtc -s mapped.tpr -i molecule.itp -itp-mode comments -dists -dist-matrix -plots -lincs
+    ff_inter -f mapped.xtc -s mapped.tpr -i molecule.itp -interactions comments -dists -dist-matrix -plots -lincs
 
 In the above command, the ``ff_inter`` subprogram takes the mapped/pseudo-atomistic system described by ``mapped.tpr``
 and ``mapped.xtc``, and interrogates the bonded interactions of the molecule described by ``molecule.itp``. On
@@ -69,7 +69,7 @@ derived from fittings to the interaction distributions in the input trajectory.
     By indicating that we want to investigate these interactions in the input topology file, we tell the ``ff_inter``
     subprogram to firstly generate time series data of these sets of beads, and then fit to time-averaged distributions,
 
-By using the `comments` mode of the ``-itp-mode`` flag, only the interactions which have been specified by the
+By using the `comments` mode of the ``-interactions`` flag, only the interactions which have been specified by the
 comments in the given itp file will be investigated and modified. More details and further options for this flag are
 given below.
 
@@ -91,8 +91,11 @@ Denoting interactions
 
 Interactions can be computed from one or multiple itp files. The molecule name
 is simply matched to those found in the tpr and trajectory file and then the
-interactions are computed for all commented interactions. For example, from the
-following entry the first two bonds are put in a group and computed together and
+interactions are computed. Using the ``-interactions`` flag, users can specify which interactions to compute. 
+By default or when using the ``-interactions comments`` flag, only interactions with a comment at the end of the line are computed.
+This allows users to specify which interactions to compute and to group together repeated interactions by using the same comment.
+
+For example, from the following entry the first two bonds are put in a group and computed together and
 the last bond is skipped.
 
 .. code-block:: none
@@ -100,15 +103,21 @@ the last bond is skipped.
     [ bonds ]
     1 2 1 2000 ; group1
     2 3 1 2000 ; group1
+    4 5 1 1500 ; group2
     4 5 1 1000
 
+
+With the ``-interactions all`` flag, all interactions in the input itp file are computed and modified in the output itp file,
+regardless of whether they have comments or not. 
+With the ``-interactions guess`` flag, interactions are guessed from the bonds in the input itp file. 
+This may be useful for parameterising a single molecule with a minimal itp file describing only atoms and bonds, as described below.
 
 Minimal itp files
 -----------------
 
 ``ff_inter`` can generate all interactions implicitly from minimal itp files describing only
-atoms and bonds. This may be useful for parameterising a single molecule. In this case, the
-input itp file can look like:
+atoms and bonds, with the ``-interactions guess`` flag. This may be useful for parameterising a single molecule.
+ In this case, the input itp file can look like:
 
 .. code-block:: none
 
