@@ -174,7 +174,7 @@ def main():
     # write coordinate
     print("INFO - Writing CG trajectory")
     # these are all the multiframe writes MDAnalysis has
-    mda_traj_formats = list(mda._MULTIFRAME_WRITERS.keys())
+    mda_traj_formats = [fmt.casefold() for fmt in mda._MULTIFRAME_WRITERS.keys()]
     outpath = pathlib.Path(args.outpath)
     outpath_extension = outpath.suffix.casefold()[1:]
     single_frame_outpath = outpath
