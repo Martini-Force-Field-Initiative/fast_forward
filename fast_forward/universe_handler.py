@@ -23,70 +23,6 @@ from fast_forward.hydrogen import BUILD_HYDRO, find_helper_atoms
 from tqdm import tqdm
 import pysmiles
 
-def assign_order(G, pos_attr='pos'):
-    """
-    Assign bond orders using 3D coordinates and RDKit's bond order determination.
-
-    Parameters:
-    NetworkX graph with 'element' node attributes and coordinates
-    pos_attr: name of the node attribute containing 3D coordinates
-    """
-    try:
-        from rdkit import Chem
-        from rdkit.Chem import AllChem, rdDetermineBonds
-        from rdkit.Geometry import Point3D
-    except ImportError:
-        msg = ("Using CGsmiles for mappings requires the rdkit package."
-               "Install it using pip install rdkit or conda.") 
-        raise ImportError(msg)
-    # Create an editable RDKit molecule
-    mol = Chem.RWMol()
-
-    # Add atoms
-    node_to_idx = {}
-    for i, (node, data) in enumerate(G.nodes(data=True)):
-        atom = Chem.Atom(data['element'])
-        idx = mol.AddAtom(atom)
-        node_to_idx[node] = idx
-
-    # Add bonds (initially as single bonds)
-    for edge in G.edges():
-        mol.AddBond(node_to_idx[edge[0]], node_to_idx[edge[1]], Chem.BondType.SINGLE)
-
-    # Add 3D coordinates if available
-    if pos_attr in next(iter(G.nodes(data=True)))[1]:
-        conf = Chem.Conformer(mol.GetNumAtoms())
-        for node, data in G.nodes(data=True):
-            idx = node_to_idx[node]
-            pos = data[pos_attr]
-            point = Point3D(float(pos[0]), float(pos[1]), float(pos[2]))
-            conf.SetAtomPosition(idx, point)
-        mol.AddConformer(conf)
-
-        # Determine bond orders from 3D structure
-        rdDetermineBonds.DetermineBondOrders(mol, charge=0)
-
-    nx.set_node_attributes(G, False, "aromatic")
-    # Transfer bond orders back to NetworkX graph
-    for edge in G.edges():
-        i, j = node_to_idx[edge[0]], node_to_idx[edge[1]]
-        bond = mol.GetBondBetweenAtoms(i, j)
-        if bond:
-            bond_type = bond.GetBondType()
-            if bond_type == Chem.BondType.SINGLE:
-                G.edges[edge]['order'] = 1
-            elif bond_type == Chem.BondType.DOUBLE:
-                G.edges[edge]['order'] = 2
-            elif bond_type == Chem.BondType.TRIPLE:
-                G.edges[edge]['order'] = 3
-            elif bond_type == Chem.BondType.AROMATIC:
-                G.edges[edge]['order'] = 1.5
-                G.nodes[edge[0]]['aromatic'] = True
-                G.nodes[edge[1]]['aromatic'] = True
-    # rdkit and pysmiles don't always see eye to eye on the definition of
-    # aromatic systems so we need to make sure to use the pysmiles definition
-    correct_aromatic_rings(G)
-
 def res_as_mol(universe):
     """
     For a universe without moltype/molnum info, promotes residues to molecules.
@@ -215,7 +151,6 @@ class UniverseHandler(mda.Universe):
             nx.set_node_attributes(g, dict(zip(molecule.indices, eles)) ,'element')
             pos = [coord for coord in molecule.positions]
             nx.set_node_attributes(g, dict(zip(molecule.indices, pos)) ,'pos')
-            #assign_order(g)
             mol_graphs[mol_name] = g
         return mol_graphs
 
