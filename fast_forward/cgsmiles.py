@@ -19,25 +19,26 @@ from cgsmiles.resolve import MoleculeResolver
 from .map_file_parers import Mapping
 from .universe_handler import ResidueIter
 
+
 def remove_explicit_hydrogens(graph):
     """
     Returns a subgraph of a molecule sans hydrogen atoms and
-    annotates the number of hydrogen atoms.
+    annotates the number of hydrogen atoms on each remaining node.
     """
     not_hnodes = [node for node in graph.nodes if graph.nodes[node]["element"] != "H"]
-    not_h_graph =  graph.subgraph(not_hnodes)
+    not_h_graph = graph.subgraph(not_hnodes)
     for node in not_hnodes:
-        hcount = 0
-        for neighbor in nx.neighbors(graph, node):
-            if graph.nodes[neighbor]["element"] == "H":
-                hcount +=1
+        hcount = sum(
+            1 for neighbor in nx.neighbors(graph, node)
+            if graph.nodes[neighbor]["element"] == "H"
+        )
         not_h_graph.nodes[node]["hcount"] = hcount
     return not_h_graph
 
+
 def load_cgsmiles_library(filepath):
     """
-    Given a file that lists cgsmiles strings,
-    read and return a list.
+    Given a file that lists cgsmiles strings, read and return them as a list.
 
     Parameters
     ----------
@@ -49,16 +50,16 @@ def load_cgsmiles_library(filepath):
     """
     cgsmiles_strs = []
     with open(filepath) as _file:
-        for line in _file.readlines():
+        for line in _file:
             cgsmiles_strs.append(line.strip())
     return cgsmiles_strs
 
+
 def find_one_graph_match(graph1, graph2):
     """
-    Returns one ismags match when graphs are isomorphic
-    otherwise []. Matches are done based on element and
-    bond order. That should be sufficent to also account
-    for charges implicitly via the orders.
+    Returns one ISMAGS match when graphs are isomorphic, otherwise [].
+    Matches are done based on element and bond order, which is sufficient
+    to also account for charges implicitly via the orders.
 
     Parameters
     ----------
@@ -67,7 +68,7 @@ def find_one_graph_match(graph1, graph2):
 
     Returns
     -------
-    abc.iteratable
+    abc.Iterator
     """
 
     def node_match(n1, n2):
@@ -81,108 +82,226 @@ def find_one_graph_match(graph1, graph2):
     else:
         graph1_no_hatoms = remove_explicit_hydrogens(graph1)
         graph2_no_hatoms = remove_explicit_hydrogens(graph2)
-        GM = nx.isomorphism.GraphMatcher(graph1_no_hatoms,
-                                         graph2_no_hatoms,
-                                         node_match=node_match)
-
+        GM = nx.isomorphism.GraphMatcher(
+            graph1_no_hatoms,
+            graph2_no_hatoms,
+            node_match=node_match,
+        )
         raw_matches = GM.subgraph_isomorphisms_iter()
+
     try:
         mapping = next(raw_matches)
-        # we need to add the hatoms to the mapping
+        # Add hydrogen atoms to the mapping
         for node in graph1.nodes:
             if graph1.nodes[node].get("element") == "H" and node not in mapping:
                 anchor = list(graph1.neighbors(node))[0]
-                hatoms_target = [ node for node in graph1.neighbors(anchor) if graph1.nodes[node]["element"] == "H"]
-                hatoms_ref = [ node for node in graph2.neighbors(mapping[anchor]) if graph2.nodes[node]["element"] == "H"]
-                # this should be enforced by the graph matching
-                # but better to check as the zip could mask issues
-                # when length does not match
+                hatoms_target = [
+                    n for n in graph1.neighbors(anchor)
+                    if graph1.nodes[n]["element"] == "H"
+                ]
+                hatoms_ref = [
+                    n for n in graph2.neighbors(mapping[anchor])
+                    if graph2.nodes[n]["element"] == "H"
+                ]
+                # Enforced by graph matching, but assert to catch any zip-masking issues
                 assert len(hatoms_target) == len(hatoms_ref)
-                hmap = dict(zip(hatoms_target, hatoms_ref))
-                mapping.update(hmap)
+                mapping.update(dict(zip(hatoms_target, hatoms_ref)))
     except StopIteration:
         mapping = []
+
     return mapping
+
 
 def _most_common(_list):
     return max(set(_list), key=_list.count)
 
+
 def get_mappings(cg, univ, _match, mappings):
     """
-    We assing each coarse CG node a resname and resid
-    based on the all-atom univ. If a bead is split between
-    residues we simply assing the resname and id of the
-    majority of atoms.
+    Assigns each coarse CG node a resname and resid based on the all-atom
+    universe. If a bead is split between residues, the resname and resid of
+    the majority of atoms is used.
 
     Parameters
     ----------
-    cg: networkx.graph
-        the coarse molecule
-    univ: :class:fast_forward.universe_handler.UniverseHandler
-        the universe stroing the fine grained molecule information
+    cg: networkx.Graph
+        The coarse molecule graph.
+    univ: :class:`fast_forward.universe_handler.UniverseHandler`
+        The universe storing the fine-grained molecule information.
     _match: dict
-        a dict mapping the coarse atoms to fine grained atoms
-    mappings:
-        dict[:class:fast_forward.map_file_parser.Mapping]
-        a dict of mapping objects
+        A dict mapping the coarse atoms to fine-grained atoms.
+    mappings: dict[:class:`fast_forward.map_file_parser.Mapping`]
+        A dict of mapping objects.
 
-    Return
-    ------
-    dict[:class:fast_forward.map_file_parser.Mapping]
-        updated mappings
+    Returns
+    -------
+    dict[:class:`fast_forward.map_file_parser.Mapping`]
+        Updated mappings.
     """
     target_resids = {}
     for bead in cg.nodes:
         atoms = cg.nodes[bead]['graph'].nodes
-        resnames = [univ.atoms[_match[atom]].resname for atom in atoms]
-        resname_default = _most_common(resnames)
-        #resname = cg.nodes[bead]["r"]
-        #resname = f"D{bead}"
-        resids = [univ.atoms[_match[atom]].resid for atom in atoms]
-        resid_default = _most_common(resids)
+        # if no resname mapping is provided everything is defaulted
+        # to RES
+        resname_default = "RES"
+        # we cannot simply take the resids provided in the input
+        # because we allow mapping across residues in which case
+        # there is no unique resid and the most common one is not
+        # safe enough
+        resid_default = 1 
         resname = cg.nodes[bead].get('resname', resname_default)
         resid = cg.nodes[bead].get('resid', resid_default)
-        cg.nodes[bead]['resid'] = bead
+        cg.nodes[bead]['resid'] = resid
         cg.nodes[bead]['resname'] = resname
         mapping = mappings.get(resname, Mapping(resname, resname))
         target_resid = target_resids.get(resname, resid)
         target_resids[resname] = target_resid
         if resid != target_resids[resname]:
             continue
-        for adx, atom in enumerate(atoms):
+        for atom in atoms:
             weight = np.float32(cg.nodes[bead]['graph'].nodes[atom].get('weight', 1))
-            mapping.add_atom(cg.nodes[bead]["fragname"], #+f"{bead}",
-                             _match[atom],
-                             atom=univ.atoms[_match[atom]].name,
-                             weight=weight)
+            mapping.add_atom(
+                # we need to append the bead index here because in a cgsmiles string
+                # the bead names do not need to be unique but the mapping infrastructure
+                # assumes this. Making this more flexible should be a future objective
+                cg.nodes[bead]["fragname"]+f"{bead}",
+                _match[atom],
+                atom=univ.atoms[_match[atom]].name,
+                weight=weight,
+            )
         mappings[resname] = mapping
 
     return mappings
 
+
 def _annotate_vs(cg_graph):
     """
-    If a node in the cg_graph is not mapped from atom positions,
-    it is a virtual site. Thus, we will compose the mapped position
-    as the union framgment graphs of neihgboring atoms. This appraoch
-    should be equivalent to a virtual_sitesn mapping.
+    Identifies virtual sites in the CG graph and annotates them.
+
+    If a node in cg_graph has no mapped atom positions, it is treated as a
+    virtual site. Its mapped position is composed as the union of fragment
+    graphs of neighboring atoms, which is equivalent to a virtual_sitesn
+    mapping.
 
     Parameters
     ----------
-    cg_graph: netwrokx.Graph
-        the graph describing a coarse molecule
+    cg_graph: networkx.Graph
+        The graph describing a coarse molecule.
     """
     for node in cg_graph.nodes:
-        if len(cg_graph.nodes[node].get('graph',[])) == 0:
+        if len(cg_graph.nodes[node].get('graph', [])) == 0:
             g = nx.Graph()
             for neigh in cg_graph.neighbors(node):
                 g.add_nodes_from(list(cg_graph.nodes[neigh]['graph'].nodes))
             cg_graph.nodes[node]['graph'] = g
 
+
+def _annotate_residues(cg, res):
+    """
+    Propagates resname and resid from a residue-level graph down to CG nodes.
+
+    Parameters
+    ----------
+    cg: networkx.Graph
+        The coarse-grained molecule graph whose nodes will be annotated.
+    res: networkx.Graph
+        The residue-level graph produced by an extra resolver pass.
+    """
+    for node in res:
+        resname = res.nodes[node]["fragname"]
+        resid = res.nodes[node]["fragid"]
+        for cgnode in res.nodes[node]['graph'].nodes:
+            cg.nodes[cgnode]["resname"] = resname
+            cg.nodes[cgnode]["resid"] = resid
+
+
+def _resolve_cg_match(cgs_str, mol_graph):
+    """
+    Resolves a cgsmiles string and returns the matched (cg, aa, match) triple,
+    or None if the string does not match mol_graph.
+
+    Parameters
+    ----------
+    cgs_str: str
+        A cgsmiles string encoding the CG mapping.
+    mol_graph: networkx.Graph
+        The all-atom molecule graph to match against.
+
+    Returns
+    -------
+    tuple[networkx.Graph, networkx.Graph, dict] or None
+    """
+    resolver = MoleculeResolver.from_string(cgs_str, last_all_atom=True)
+    nres = cgs_str.count("{")
+    assert nres > 1, "cgsmiles string must contain at least two resolution levels."
+
+    if nres > 2:
+        res, _ = resolver.resolve()
+
+    cg, aa = resolver.resolve()
+
+    if nres > 2:
+        _annotate_residues(cg, res)
+
+    _annotate_vs(cg)
+    match = find_one_graph_match(aa, mol_graph)
+    return (cg, aa, match) if match else None
+
+
+def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
+    """
+    Iterates over all molecule instances and collects per-bead mapped atoms,
+    weights, and bead indices.
+
+    Parameters
+    ----------
+    cg: networkx.Graph
+    match: dict
+        Mapping from CG atom indices to all-atom indices (for one molecule instance).
+    mol_idxs: list[int]
+        Indices of all instances of this molecule in the universe.
+    mol_graph: networkx.Graph
+    bead_count: int
+        Running bead index to continue from.
+    res_iter: ResidueIter
+
+    Returns
+    -------
+    tuple[list, list, list, int, ResidueIter]
+        mapped_atoms, weights, bead_idxs, updated bead_count, res_iter
+    """
+    mapped_atoms, weights, bead_idxs = [], [], []
+    prev_resid = -1
+    offset = 0
+
+    for _ in mol_idxs:
+        for bead in cg.nodes:
+            resid = cg.nodes[bead]['resid']
+            resname = cg.nodes[bead]['resname']
+            if prev_resid != resid:
+                prev_resid = resid
+                res_iter.add_residue(resid=resid, resname=resname)
+
+            atoms = cg.nodes[bead]['graph'].nodes
+            mapped_atoms.append(
+                numba.typed.List([match[atom] + offset for atom in atoms])
+            )
+            bead_weights = nx.get_node_attributes(cg.nodes[bead]['graph'], 'weight')
+            weights.append(
+                np.array([bead_weights.get(atom, 1.0) for atom in atoms], dtype=np.float32)
+            )
+            bead_idxs.append(bead_count)
+            bead_count += 1
+
+        offset += len(mol_graph)
+
+    return mapped_atoms, weights, bead_idxs, bead_count, res_iter
+
+
 def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     """
-    Given a list of mappings described by cgsmiles strings
-    this function maps the atom indices to CG beads using,
-    graph isomorphism.
+    Given a list of mappings described by cgsmiles strings, maps atom indices
+    to CG beads using graph isomorphism.
 
     Parameters
     ----------
@@ -190,73 +309,47 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     cgsmiles_strs: list[str]
     mol_names: list[str]
     mol_matching: bool
-        if is False the order of cgsmiles strings is equivalent
-        to the order of molecules
+        If False, the order of cgsmiles strings is assumed to match the order
+        of molecules.
 
     Returns
     -------
     list, list, dict
     """
-    mapped_atoms, bead_idxs, mappings, weights = [], [], {}, []
+    all_mapped_atoms, all_bead_idxs, all_weights = [], [], []
+    mappings = {}
     bead_count = 0
+    res_iter = ResidueIter()
+
     for idx, mol_name in enumerate(mol_names):
         mol_graph = univ.molecule_graphs[mol_name]
-        # names match the order of cgs strings
-        if mol_matching:
-            possible_cgs = [cgsmiles_strs[idx]]
-        else:
-            possible_cgs = cgsmiles_strs
+        candidates = [cgsmiles_strs[idx]] if mol_matching else cgsmiles_strs
 
-        for cgs_str in possible_cgs:
-            # read the cgsmiles string
-            resolver = MoleculeResolver.from_string(cgs_str, last_all_atom=True)
-            # check how many resolutions there are
-            nres = cgs_str.count("{")
-            # we need at least two resolutions
-            assert nres > 1
-            # residues are defined as well
-            if nres > 2:
-                res, cg_to_res = resolver.resolve() 
-            cg, aa = resolver.resolve()
-            if nres > 2:
-               # now annotate resid and resname to cg level
-                for node in res:
-                    resname = res.nodes[node]["fragname"]
-                    resid = res.nodes[node]["fragid"]
-                    for cgnode in res.nodes[node]['graph'].nodes:
-                        cg.nodes[cgnode]["resname"] = resname
-                        cg.nodes[cgnode]["resid"] = resid
-            _annotate_vs(cg)
-            _match = find_one_graph_match(aa, mol_graph)
-            if _match:
+        # Find the first cgsmiles string that matches this molecule
+        resolved = None
+        for cgs_str in candidates:
+            resolved = _resolve_cg_match(cgs_str, mol_graph)
+            if resolved is not None:
                 break
-        else:
-            raise SyntaxError('No matching cgsmiles string found for '
-                              f'molecule {mol_name}.')
+        if resolved is None:
+            raise SyntaxError(
+                f'No matching cgsmiles string found for molecule {mol_name}.'
+            )
+        cg, aa, match = resolved
 
-        # assgin resids to the beads
-        mappings = get_mappings(cg, univ, _match, mappings)
+        mappings = get_mappings(cg, univ, match, mappings)
+        mol_idxs = univ.mol_idxs_by_name[mol_name]
+        mapped_atoms, weights, bead_idxs, bead_count, res_iter = _collect_bead_data(
+            cg, match, mol_idxs, mol_graph, bead_count, res_iter
+        )
+        all_mapped_atoms.extend(mapped_atoms)
+        all_weights.extend(weights)
+        all_bead_idxs.extend(bead_idxs)
 
-        offset=0
-        target_resids = {}
-        res_iter = ResidueIter()
-        prev_resid = -1
-        for mol_idx in univ.mol_idxs_by_name[mol_name]:
-            for bead in cg.nodes:
-                resid = cg.nodes[bead]['resid']
-                resname = cg.nodes[bead]['resname']
-                if prev_resid != resid:
-                    prev_resid = resid
-                    res_iter.add_residue(resid=resid, resname=resname)
-                atoms = cg.nodes[bead]['graph'].nodes
-                mapped_atoms.append(numba.typed.List([_match[atom]+offset for atom in atoms]))
-                set_weights = nx.get_node_attributes(cg.nodes[bead]['graph'], 'weight')
-                weights.append(np.array([set_weights.get(node, 1.0) for node in atoms], dtype=np.float32))
-                bead_idxs.append(bead_count)
-                bead_count += 1
-            offset += len(mol_graph)
-
-    mapped_atoms = numba.typed.List(mapped_atoms)
-    bead_idxs = numba.typed.List(bead_idxs)
-    weights = numba.typed.List(weights)
-    return mapped_atoms, bead_idxs, mappings, weights, res_iter
+    return (
+        numba.typed.List(all_mapped_atoms),
+        numba.typed.List(all_bead_idxs),
+        mappings,
+        numba.typed.List(all_weights),
+        res_iter,
+    )
