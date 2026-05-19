@@ -80,6 +80,7 @@ def _gaussian_generator(x, params):
     pars.add("amplitude", params['amplitude'].value)
     fitted_distribution = mod.eval(pars, x=x)
     return fitted_distribution
+
 def _periodic_gaussian_generator(x, c, s, a):
     """
     Generate a gaussian function from fitted parameters across x with periodicity
@@ -90,6 +91,7 @@ def _periodic_gaussian_generator(x, c, s, a):
     for k in range(-terms, terms+1):
         y += np.exp(-0.5 * ((x - c + k * period) / s)**2)
     return y * a
+
 class InteractionFitter:
     """
     Class to fit interactions
@@ -98,7 +100,7 @@ class InteractionFitter:
     interactions_dict: defaultdict  # <-- Add this line
 
     def __init__(self, precision, temperature, constraint_converter,
-                 max_dihedrals, dihedral_scaling, disable_aic_penalty=False):
+                 max_dihedrals, dihedral_scaling, use_aic_penalty=True):
         '''
 
         Parameters
@@ -111,8 +113,10 @@ class InteractionFitter:
             threshold above which to convert bonds to constraints
         max_dihedrals: int
             maximum number of dihedrals to fit proper dihedrals with
-        disable_aic_penalty: bool
-            if True, disable AIC penalty for dihedral fitting and use all available terms
+        use_aic_penalty: bool
+            use Akaike Information Criterion (AIC) statistic to decide if an
+            additional term in the dihedral fitting is benefitial. This option
+            minimizes the number of terms used to fit an dihedral (default: True)
         '''
         self.__dihedrals = None
         self.precision = precision
@@ -293,9 +297,8 @@ class InteractionFitter:
         num_terms = len(best_params) // 3  # Each term has k, n, and x0
 
         # If AIC penalty is disabled, always use proper dihedrals with all fitted terms
-        if self.disable_aic_penalty:
-            condition0 = True
-        else:
+        condition0 = True
+        if self.use_aic_penalty:
             condition0 = best_aic < gaussian_result.aic
         condition1 = np.isclose(gaussian_result.params['sigma'].value, gaussian_result.params['sigma'].max)
 
