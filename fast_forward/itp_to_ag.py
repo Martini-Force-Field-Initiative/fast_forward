@@ -7,7 +7,7 @@ import numpy as np
 import networkx as nx
 from fast_forward.universe_handler import res_as_mol
 
-def find_mol_indices(universe, atoms, moltype):
+def find_mol_indices(universe, atoms, moltypes):
     """
     Given a universe select all atoms that belong to molecules 
     of the given `moltype`. Subsequently, return indices of all
@@ -27,12 +27,14 @@ def find_mol_indices(universe, atoms, moltype):
     """
     mol_atoms = universe.select_atoms(f'moltype {moltype}')
     n_mols = len(np.unique(mol_atoms.molnums))
+
     try:
         mol_atom_indices = mol_atoms.indices.reshape(n_mols, -1)
     except ValueError:
         msg = ("The target molecules passed to find_mol_indices "
                "do not seem to all have the same number of atoms.")
         raise IndexError(msg) from None
+
     return list(mol_atom_indices[:, atoms])
 
 class ITPInteractionMapper:
@@ -96,7 +98,7 @@ class ITPInteractionMapper:
         block = self.blocks[molname]
 
         indices_dict = defaultdict(dict)
-        
+
         for node1, name1 in block.nodes(data='atomname'):
             for node2, name2 in list(block.nodes(data='atomname'))[node1+1:]:
                 atoms = np.array([node1, node2])

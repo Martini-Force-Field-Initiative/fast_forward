@@ -131,6 +131,7 @@ def main():
         mapped_atoms, bead_idxs, weights = forward_map_indices(init_universe,
                                                                mappings)
         cgsmiles_strs = None
+        res_iter = None
     # we do the mapping with cgsmiles
     elif args.cgsmiles_library:
         cgsmiles_strs = load_cgsmiles_library(args.cgsmiles_library)
@@ -139,10 +140,10 @@ def main():
 
     if cgsmiles_strs:
         print("INFO - Mapping CGsmiles to universe.")
-        mapped_atoms, bead_idxs, mappings, weights = cgsmiles_to_mapping(init_universe,
-                                                                         cgsmiles_strs,
-                                                                         args.mol_names,
-                                                                         mol_matching=args.cgsorder)
+        mapped_atoms, bead_idxs, mappings, weights, res_iter = cgsmiles_to_mapping(init_universe,
+                                                                                  cgsmiles_strs,
+                                                                                  args.mol_names,
+                                                                                  mol_matching=args.cgsorder)
     n_frames = len(init_universe.trajectory)
     print("INFO - Mapping universe - positions")
     # extract the position array from universe
@@ -165,11 +166,15 @@ def main():
                                               treated_atoms)
 
     print("INFO - Mapping universe - building pos-array")
-    cg_universe = create_new_universe(init_universe, mapped_trajectory, mappings)
+    cg_universe = create_new_universe(init_universe,
+                                      mapped_trajectory,
+                                      mappings,
+                                      n_residues=None,
+                                      res_iter=res_iter)
     # write coordinate
     print("INFO - Writing CG trajectory")
     # these are all the multiframe writes MDAnalysis has
-    mda_traj_formats = list(mda._MULTIFRAME_WRITERS.keys())
+    mda_traj_formats = [fmt.casefold() for fmt in mda._MULTIFRAME_WRITERS.keys()]
     outpath = pathlib.Path(args.outpath)
     outpath_extension = outpath.suffix.casefold()[1:]
     single_frame_outpath = outpath

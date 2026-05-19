@@ -21,15 +21,7 @@ from pysmiles import PTE
 from pysmiles.smiles_helper import correct_aromatic_rings, increment_bond_orders
 from fast_forward.hydrogen import BUILD_HYDRO, find_helper_atoms
 from tqdm import tqdm
-
-def assign_order(g):
-    increment_bond_orders(g)
-    for n1, n2, order in g.edges(data='order'):
-        if order > 1:
-            g.nodes[n1]['aromatic'] = True
-            g.nodes[n2]['aromatic'] = True
-    correct_aromatic_rings(g)
-    return g
+import pysmiles
 
 def res_as_mol(universe):
     """
@@ -45,6 +37,29 @@ def res_as_mol(universe):
     molnums = Molnums(range(len(universe.residues)))
     universe.add_TopologyAttr(moltypes)
     universe.add_TopologyAttr(molnums)
+
+class Residue():
+    """
+    Helper class for a residue.
+    """
+    def __init__(self, resname, resid):
+        self.resname = resname
+        self.resid = resid
+
+class ResidueIter():
+    """
+    Helper class mimicking to iterate over the residues
+    of an mdanlaysis universe.
+    """
+    def __init__(self):
+        self.residues = []
+
+    def add_residue(self, resname, resid):
+        self.residues.append(Residue(resname, resid))
+
+    def res_iter(self):
+        for residue in self.residues:
+            yield residue
 
 class UniverseHandler(mda.Universe):
     """
@@ -106,7 +121,7 @@ class UniverseHandler(mda.Universe):
         atoms_to_treat = self.select_atoms(select_string)
         # so they can be properly mapped to carbons later, since united-atoms
         # may end up with larger masses.
-        atoms_to_treat.masses = PTE['C']['AtomicMass'] 
+        atoms_to_treat.masses = PTE['C']['AtomicMass']
         for atom in tqdm(atoms_to_treat):
             carbon_type = association_dict[atom.type]
             for ts in self.trajectory:
@@ -134,7 +149,8 @@ class UniverseHandler(mda.Universe):
             g.add_edges_from(bonds)
             nx.set_edge_attributes(g, lengths, 'length')
             nx.set_node_attributes(g, dict(zip(molecule.indices, eles)) ,'element')
-            g=assign_order(g)
+            pos = [coord for coord in molecule.positions]
+            nx.set_node_attributes(g, dict(zip(molecule.indices, pos)) ,'pos')
             mol_graphs[mol_name] = g
         return mol_graphs
 
