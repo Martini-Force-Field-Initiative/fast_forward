@@ -81,6 +81,8 @@ def __main__():
                         help='Precision of variables written to itp')
     parser.add_argument('-max-dihedral', dest='max_dihedral', type=int, default=10,
                         help='Maximum multiplicity of dihedral to try stacking during dihedral fitting')
+    parser.add_argument('-minimize-dihedrals', default=True, action="store_true",
+                        dest="minimize_dih_terms", help="Try to minimize the number of dihedral terms used to fit a single dihedral.")
     parser.add_argument('-dihedral-scaling', dest='dihedral_scaling', type=int, default=1e3,
                         help='Scale factor for strength of proper dihedral terms from fit to potential')
     parser.add_argument('-interactions', dest="int_mode", choices=["guess", "comments", "all"],
@@ -90,8 +92,6 @@ def __main__():
                         dest="dist_matrix", help="Save text files with time series and distribution data for all pairwise bead distances")
     parser.add_argument('-lincs', default=False, action="store_true",
                         dest="estimate_lincs", help="Estimate the LINCS order required for solving the constraints in the molecule(s)")
-    parser.add_argument('-multi-dihedral', default=False, action="store_true",
-                        dest="multi_dihedral", help="Fit multiple dihedral terms on top of each other and ignore penalty")
 
     args = parser.parse_args()
 
@@ -114,7 +114,7 @@ def __main__():
                                    temperature=args.temperature,
                                    precision=args.precision,
                                    dihedral_scaling=args.dihedral_scaling,
-                                   disable_aic_penalty=args.multi_dihedral)
+                                   disable_aic_penalty=minimize_dih_terms)
         
         interaction_mapper = ITPInteractionMapper(u, ff.blocks.values(), ff.blocks.keys())
         # loop over molecules
