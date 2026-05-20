@@ -25,7 +25,7 @@ def find_mol_indices(universe, atoms, moltypes):
     list
         list of :class:`~numpy.ndarray`
     """
-    mol_atoms = universe.select_atoms(f'moltype {moltype}')
+    mol_atoms = universe.select_atoms(f'moltype {moltypes}')
     n_mols = len(np.unique(mol_atoms.molnums))
 
     try:
