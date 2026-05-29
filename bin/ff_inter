@@ -81,6 +81,8 @@ def __main__():
                         help='Precision of variables written to itp')
     parser.add_argument('-max-dihedral', dest='max_dihedral', type=int, default=10,
                         help='Maximum multiplicity of dihedral to try stacking during dihedral fitting')
+    parser.add_argument('-minimize-dihedrals', default=True, action="store_true",
+                        dest="minimize_dih_terms", help="Try to minimize the number of dihedral terms used to fit a single dihedral.")
     parser.add_argument('-dihedral-scaling', dest='dihedral_scaling', type=int, default=1e3,
                         help='Scale factor for strength of proper dihedral terms from fit to potential')
     parser.add_argument('-interactions', dest="int_mode", choices=["guess", "comments", "all"],
@@ -111,7 +113,8 @@ def __main__():
                                    max_dihedrals=args.max_dihedral,
                                    temperature=args.temperature,
                                    precision=args.precision,
-                                   dihedral_scaling=args.dihedral_scaling)
+                                   dihedral_scaling=args.dihedral_scaling,
+                                   use_aic_penalty=args.minimize_dih_terms)
         
         interaction_mapper = ITPInteractionMapper(u, ff.blocks.values(), ff.blocks.keys())
         # loop over molecules

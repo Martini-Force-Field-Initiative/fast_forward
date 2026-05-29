@@ -80,6 +80,7 @@ def _gaussian_generator(x, params):
     pars.add("amplitude", params['amplitude'].value)
     fitted_distribution = mod.eval(pars, x=x)
     return fitted_distribution
+
 def _periodic_gaussian_generator(x, c, s, a):
     """
     Generate a gaussian function from fitted parameters across x with periodicity
@@ -90,6 +91,7 @@ def _periodic_gaussian_generator(x, c, s, a):
     for k in range(-terms, terms+1):
         y += np.exp(-0.5 * ((x - c + k * period) / s)**2)
     return y * a
+
 class InteractionFitter:
     """
     Class to fit interactions
@@ -98,7 +100,7 @@ class InteractionFitter:
     interactions_dict: defaultdict  # <-- Add this line
 
     def __init__(self, precision, temperature, constraint_converter,
-                 max_dihedrals, dihedral_scaling):
+                 max_dihedrals, dihedral_scaling, use_aic_penalty=True):
         '''
 
         Parameters
@@ -111,6 +113,10 @@ class InteractionFitter:
             threshold above which to convert bonds to constraints
         max_dihedrals: int
             maximum number of dihedrals to fit proper dihedrals with
+        use_aic_penalty: bool
+            use Akaike Information Criterion (AIC) statistic to decide if an
+            additional term in the dihedral fitting is benefitial. This option
+            minimizes the number of terms used to fit an dihedral (default: True)
         '''
         self.__dihedrals = None
         self.precision = precision
@@ -119,6 +125,7 @@ class InteractionFitter:
         self.constraint_converter = constraint_converter
         self.max_dihedrals = max_dihedrals
         self.dihedral_scaling = dihedral_scaling
+        self.use_aic_penalty = use_aic_penalty
         # this will store the interactions
         self.interactions_dict = defaultdict(list)
         self.fit_parameters = defaultdict(dict)
@@ -289,7 +296,10 @@ class InteractionFitter:
 
         num_terms = len(best_params) // 3  # Each term has k, n, and x0
 
-        condition0 = best_aic < gaussian_result.aic
+        # If AIC penalty is disabled, always use proper dihedrals with all fitted terms
+        condition0 = True
+        if self.use_aic_penalty:
+            condition0 = best_aic < gaussian_result.aic
         condition1 = np.isclose(gaussian_result.params['sigma'].value, gaussian_result.params['sigma'].max)
 
         # compare the aic values to determine which type of dihedral we have
