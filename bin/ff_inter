@@ -114,7 +114,7 @@ def __main__():
                                    temperature=args.temperature,
                                    precision=args.precision,
                                    dihedral_scaling=args.dihedral_scaling,
-                                   disable_aic_penalty=minimize_dih_terms)
+                                   use_aic_penalty=args.minimize_dih_terms)
         
         interaction_mapper = ITPInteractionMapper(u, ff.blocks.values(), ff.blocks.keys())
         # loop over molecules

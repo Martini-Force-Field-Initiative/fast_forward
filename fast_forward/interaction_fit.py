@@ -125,7 +125,7 @@ class InteractionFitter:
         self.constraint_converter = constraint_converter
         self.max_dihedrals = max_dihedrals
         self.dihedral_scaling = dihedral_scaling
-        self.disable_aic_penalty = disable_aic_penalty
+        self.use_aic_penalty = use_aic_penalty
         # this will store the interactions
         self.interactions_dict = defaultdict(list)
         self.fit_parameters = defaultdict(dict)
