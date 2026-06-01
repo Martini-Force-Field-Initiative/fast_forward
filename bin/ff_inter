@@ -92,6 +92,8 @@ def __main__():
                         dest="estimate_lincs", help="Estimate the LINCS order required for solving the constraints in the molecule(s)")
 
     args = parser.parse_args()
+    if args.plots is None and args.plot_data:
+        args.plots = "."
 
     # load trajectory
     if args.tprfile:
