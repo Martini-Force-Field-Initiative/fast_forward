@@ -137,7 +137,9 @@ def __main__():
                         help="Save text files with time series and distribution data for interactions. Optionally provide a path (default: current dir).")
 
     args = parser.parse_args()
-
+    if args.plots is None and args.plot_data:
+        args.plots = "."
+        
     distribution_files = glob(f'{args.reference}/*distr.dat')
     # create file map
     file_map = {}
