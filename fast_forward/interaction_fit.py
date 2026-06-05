@@ -244,7 +244,8 @@ class InteractionFitter:
 
         # take care of periodic effects for improper dihedrals
         x_gauss = np.linspace(-2*np.pi, 2*np.pi, 720)
-        y_gauss = np.tile(y, 2)
+        # roll by half a period so the tiled copies align with x_gauss
+        y_gauss = np.roll(np.tile(y, 2), y.size // 2)
 
         # first try fitting a gaussian to the data in case we have an improper dihedral
         gaussian_result = _gaussian_fitter(x_gauss[120:-120],
@@ -311,8 +312,8 @@ class InteractionFitter:
                                                                                                             x)}
 
         else:
-            # transform the centre back into the correct domain after fitting to account for periodicity.
-            c0 = (gaussian_result.params['center'].value + (2*np.pi)) % (2*np.pi) - np.pi
+            # wrap the fitted centre into [-pi, pi]
+            c0 = ((gaussian_result.params['center'].value + np.pi) % (2*np.pi)) - np.pi
 
             center = np.round(c0, self.precision)
             sigma = np.round((self.kb * self.temperature) / ((gaussian_result.params['sigma']) ** 2), self.precision)
