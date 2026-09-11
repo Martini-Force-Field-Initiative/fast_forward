@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from importlib.metadata import PackageNotFoundError, version
+# from importlib.metadata import PackageNotFoundError, version
 
-try:
-    __version__ = version('fast_forward')
-except PackageNotFoundError:
-    __version__ = '0+unknown'
+# try:
+#     __version__ = version('fast_forward')
+# except PackageNotFoundError:
+#     __version__ = '0+unknown'
 
 # Find the data directory once.
 try:
