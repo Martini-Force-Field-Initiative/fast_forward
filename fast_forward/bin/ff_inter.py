@@ -58,7 +58,7 @@ def virtualsite_atoms(block):
     return constructors
 
 
-def __main__():
+def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
     parser.add_argument('-f', type=str, dest="trajfile", help="trajectory file")
     parser.add_argument('-s', type=str, dest="tprfile", help="tpr file", default=None)
@@ -187,4 +187,5 @@ def __main__():
     # write out using DeferredFileWriter to back up any existing files of the same names
     DeferredFileWriter().write()
 
-__main__()
+if __name__ == "__main__":
+    main()
