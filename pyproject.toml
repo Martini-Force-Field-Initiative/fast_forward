@@ -8,7 +8,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fast_forward"
-dynamic = ["version"]
+# hard code this for now while we don't deploy to pypi
+version="0.0.3"
+# dynamic = ["version"]
 description = "Fast-Forward: Automatic Assignment and Assessment of Bonded Parameters for the Martini Force Field"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
