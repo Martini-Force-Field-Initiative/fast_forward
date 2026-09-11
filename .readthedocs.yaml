@@ -8,8 +8,8 @@ version: 2
 # Set the OS, Python version and other tools you might need
 build:
   os: ubuntu-24.04
-  # tools:
-    # python: "3.10"
+  tools:
+    python: "3.11"
     # You can also specify other tool versions:
     # nodejs: "23"
     # rust: "1.82"
