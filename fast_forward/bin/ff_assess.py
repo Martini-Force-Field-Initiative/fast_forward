@@ -113,7 +113,7 @@ def report_distances(score_matrix, molname, atom_names):
     with open('report_distances.out', 'w') as fout:
         fout.writelines(printable)
 
-def __main__():
+def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
     parser.add_argument('-f', type=str, dest="trajfile", help="simulated trajectory file")
     parser.add_argument('-s', type=str, dest="tprfile", help="simulated tpr file", default=None)
@@ -238,4 +238,6 @@ def __main__():
                 )
 
             report_distances(score_m, molname, atom_names)
-__main__()
+
+if __name__ == "__main__":
+    main()
