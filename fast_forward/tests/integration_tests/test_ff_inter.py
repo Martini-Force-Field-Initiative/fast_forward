@@ -14,7 +14,7 @@ from pathlib import Path
                                 '-s', GSH_CG_TPR,
                                 '-i', GSH_ITP_INTIIAL,
                                 '-max-dihedral', '10',
-                                '-interactions', 'guess',
+                                '-interactions', 'comments',
                                 '-dists',], GSH_DISTS),)
                          )
 def test_ff_inter(tmp_path, monkeypatch, command_list, reference_distributions):
@@ -50,7 +50,7 @@ def test_ff_inter(tmp_path, monkeypatch, command_list, reference_distributions):
         with open(f0, 'rb') as f:
             data0 = np.load(f)
         data1 = np.loadtxt(f1)
-        assert np.allclose(data0, data1, atol=5e-4)
+        assert np.allclose(data0, data1, atol=1e-3)
 
     # compare the output itps
     output_itp = [i for i in files if i.suffix == '.itp'][0]

@@ -58,7 +58,7 @@ As well as a report with the scoring function:
 .. code-block::
 
      [ Interaction Distribution Report ]
-       Overall Score : 0.365 ± 0.0219
+       Overall Score : 0.368 ± 0.0234
 
      Interaction Scores:
      0 - identical, 1 - no overlap
