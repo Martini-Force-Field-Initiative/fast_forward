@@ -1,8 +1,6 @@
 import re
 import subprocess
-from pathlib import Path
 
-import numpy as np
 import pytest
 from vermouth.tests.helper_functions import find_in_path
 
@@ -13,19 +11,6 @@ SCORE_LINE = re.compile(r'^\t(\S+)\s*:\s*([-\d.]+)\s*\(([-\d.]+)\)')
 SECTION_LINE = re.compile(r'^\[\s*(\w+)\s*\]')
 ATOM_LINE = re.compile(r'^\s*\d+\s+\S+\s+(\d+)\s+\S+\s+(\S+)')
 COMMENT = re.compile(r';\s*(\S+)\s*$')
-
-
-def _materialize_dat_reference(npy_dir, dat_dir):
-    """
-    ff_assess reads its reference distributions as plain-text '*_distr.dat'
-    files. The fixtures are kept as .npy (smaller, consistent with the
-    ff_inter fixtures), so re-write them as .dat into `dat_dir` for ff_assess
-    to consume.
-    """
-    dat_dir.mkdir(parents=True, exist_ok=True)
-    for npy_file in Path(npy_dir).glob('*.npy'):
-        np.savetxt(dat_dir / f'{npy_file.stem}.dat', np.load(npy_file))
-    return dat_dir
 
 
 def _parse_itp(itp_path):
@@ -59,15 +44,14 @@ def _parse_itp(itp_path):
 
 @pytest.mark.parametrize('command_list', [['-f', GSH_ASSESS_TRAJ,
                                            '-s', GSH_ASSESS_TPR,
-                                           '-i', GSH_ITP_OUTPUT]])
+                                           '-i', GSH_ITP_OUTPUT,
+                                           '-d', GSH_ASSESS_REFERENCE]])
 def test_ff_assess(tmp_path, monkeypatch, command_list):
 
     monkeypatch.chdir(tmp_path)
     ff_assess = find_in_path(names=('ff_assess', ))
 
-    reference_dir = _materialize_dat_reference(GSH_ASSESS_REFERENCE, tmp_path / 'reference')
-
-    command = [ff_assess, ] + command_list + ['-d', reference_dir]
+    command = [ff_assess, ] + command_list
 
     proc = subprocess.run(command, cwd='.', timeout=60, check=False,
                           stdout=subprocess.PIPE,
