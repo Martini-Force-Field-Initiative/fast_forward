@@ -25,3 +25,8 @@ docs/source/.doctrees
 /build/
 /AUTHORS
 /ChangeLog
+
+**/*.lock
+**/*.npz
+
+
