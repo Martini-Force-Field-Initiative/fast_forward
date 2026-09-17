@@ -1,10 +1,10 @@
 ; This file was generated using the following command:
-; /coarse/chris/python_packages/fast_forward/.venv/bin/ff_inter -f ../CG/mapped.xtc -s GSH.tpr -i GSH_initial.itp -max-dihedral 5 -dists
+; /Users/chrisbrasnett/Documents/GitHub/fast_forward/.venv/bin/ff_inter -f /Users/chrisbrasnett/Documents/GitHub/fast_forward/fast_forward/tests/data/GSH/CG/mapped.xtc -s /Users/chrisbrasnett/Documents/GitHub/fast_forward/fast_forward/tests/data/GSH/interactions/mapped.tpr -i /Users/chrisbrasnett/Documents/GitHub/fast_forward/fast_forward/tests/data/GSH/GSH_initial.itp -max-dihedral 10 -interactions guess -dists
 ; 
 
 ; Please cite the following papers:
 ; Kroon, P C; Grunewald, F; Barnoud, J; van Tilburg, M; Souza, P C; Wassenaar, T A; Marrink, S J;  elife 2024; 10.7554/elife.90627.2
-; Brasnett, C; Grunewald, L; Wassenaar, T A; Marrink, S J; Grunewald, F;  2025; https://zenodo.org/badge/latestdoi/327071500
+; {Brasnett, C; Fidlin, M; Duve, T; Thallmair, S; Marrink, S J; Grünewald, F;   {ChemRxiv  {2026;  {10.26434/chemrxiv.15001072/v1
 
 [ moleculetype ]
 GSH 1
@@ -18,34 +18,37 @@ GSH 1
 6 SQ5n 1 GSH CAC2 6 -1.0 
 
 [ bonds ]
-1 2 1 0.264 5925.634 ; CAC1_AMC1
-3 4 1 0.289 6211.916 ; AMD1_SUL1
-3 5 1 0.359 9607.543 ; AMD1_AMD2
-5 6 1 0.329 5794.11 ; AMD2_CAC2
+1 2 1 0.278 5717.075 ; CAC1_AMC1
+3 4 1 0.273 4900.223 ; AMD1_SUL1
+3 5 1 0.357 8109.482 ; AMD1_AMD2
 
 #ifdef FLEXIBLE
-2 3 1 0.383 10000 ; AMC1_AMD1
+2 3 1 0.415 10000 ; AMC1_AMD1
+5 6 1 0.284 10000 ; AMD2_CAC2
 #endif
 
 [ constraints ]
 #ifndef FLEXIBLE
-2 3 1 0.383 ; AMC1_AMD1
+2 3 1 0.415 ; AMC1_AMD1
+5 6 1 0.284 ; AMD2_CAC2
 #endif
 
 [ angles ]
-1 2 3 1 120.959 68.0 ; CAC1_AMC1_AMD1
-2 3 4 1 129.3 83.735 ; AMC1_AMD1_SUL1
-2 3 5 1 136.652 106.419 ; AMC1_AMD1_AMD2
-3 5 6 1 124.461 55.235 ; AMD1_AMD2_CAC2
-4 3 5 1 68.876 57.628 ; SUL1_AMD1_AMD2
+1 2 3 1 114.454 44.519 ; 1_CAC1_1_AMC1_1_AMD1
+2 3 4 1 128.897 82.783 ; 1_AMC1_1_AMD1_1_SUL1
+2 3 5 1 133.35 86.865 ; 1_AMC1_1_AMD1_1_AMD2
+4 3 5 1 81.985 51.137 ; 1_SUL1_1_AMD1_1_AMD2
+3 5 6 1 127.251 79.14 ; 1_AMD1_1_AMD2_1_CAC2
 
 [ dihedrals ]
-2 3 5 6 2 -0.0 4.331 ; AMC1_AMD1_AMD2_CAC2
-4 3 5 6 2 165.585 2.406 ; SUL1_AMD1_AMD2_CAC2
+4 3 5 6 2 -27.617 546493801.368 ; 1_SUL1_1_AMD1_1_AMD2_1_CAC2
 
-; CAC1_AMC1_AMD1_AMD2
-1 2 3 5 9 -90.956 -2.225 1 ; CAC1_AMC1_AMD1_AMD2
+; 1_AMC1_1_AMD1_1_AMD2_1_CAC2
+2 3 5 6 9 38.433 -2.499 1 ; 1_AMC1_1_AMD1_1_AMD2_1_CAC2
 
-; CAC1_AMC1_AMD1_SUL1
-1 2 3 4 9 169.64 -2.277 1 ; CAC1_AMC1_AMD1_SUL1
+; 1_CAC1_1_AMC1_1_AMD1_1_AMD2
+1 2 3 5 9 -89.77 -2.216 1 ; 1_CAC1_1_AMC1_1_AMD1_1_AMD2
+
+; 1_CAC1_1_AMC1_1_AMD1_1_SUL1
+1 2 3 4 9 161.861 -2.293 1 ; 1_CAC1_1_AMC1_1_AMD1_1_SUL1
 

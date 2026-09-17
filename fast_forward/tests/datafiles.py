@@ -4,9 +4,7 @@ from pathlib import Path
 try:
     import pkg_resources
 except ImportError:
-    import os
-    TEST_DATA = os.path.join(os.path.dirname(__file__), 'data')
-    del os
+    TEST_DATA = Path(__file__).resolve().parent / 'data'
 else:
     TEST_DATA = Path(pkg_resources.resource_filename('fast_forward.tests', 'data'))
     del pkg_resources

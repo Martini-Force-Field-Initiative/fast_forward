@@ -13,7 +13,8 @@ from pathlib import Path
                              ((['-f', GSH_CG_TRAJ,
                                 '-s', GSH_CG_TPR,
                                 '-i', GSH_ITP_INTIIAL,
-                                '-max-dihedral', '5',
+                                '-max-dihedral', '10',
+                                '-interactions', 'guess',
                                 '-dists',], GSH_DISTS),)
                          )
 def test_ff_inter(tmp_path, monkeypatch, command_list, reference_distributions):
