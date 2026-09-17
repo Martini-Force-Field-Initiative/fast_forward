@@ -115,24 +115,25 @@ The new directive looks like this:
 .. code-block::
 
     [ bonds ]
-    1 2 1 0.264 5925.634 ; CAC1_AMC1
-    3 4 1 0.289 6211.916 ; AMD1_SUL1
-    3 5 1 0.359 9607.543 ; AMD1_AMD2
-    5 6 1 0.329 5794.11 ; AMD2_CAC2
+    1 2 1 0.278 5717.075 ; CAC1_AMC1
+    3 4 1 0.273 4900.223 ; AMD1_SUL1
+    3 5 1 0.357 8109.482 ; AMD1_AMD2
 
     #ifdef FLEXIBLE
-    2 3 1 0.383 10000 ; AMC1_AMD1
+    2 3 1 0.415 10000 ; AMC1_AMD1
+    5 6 1 0.284 10000 ; AMD2_CAC2
     #endif
 
     [ constraints ]
     #ifndef FLEXIBLE
-    2 3 1 0.383 ; AMC1_AMD1
+    2 3 1 0.415 ; AMC1_AMD1
+    5 6 1 0.284 ; AMD2_CAC2
     #endif
 
 We can see a few things:
 
 1. The bond lengths and force constants have been updated according to the fitted data.
-2. One of the bonds has been converted into a constraint. The constraint is decorated with a Gromacs conditional, for energy minimisation purposes.
+2. Two of the bonds have been converted into constraints. Each constraint is decorated with a Gromacs conditional, for energy minimisation purposes.
 3. The comments have been retained.
 
 The updated itp file should also have ``[ angles ]`` and ``[ dihedrals ]`` directives,

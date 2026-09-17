@@ -1,5 +1,5 @@
 ; This file was generated using the following command:
-; /Users/chrisbrasnett/Documents/GitHub/fast_forward/.venv/bin/ff_inter -f /Users/chrisbrasnett/Documents/GitHub/fast_forward/fast_forward/tests/data/GSH/CG/mapped.xtc -s /Users/chrisbrasnett/Documents/GitHub/fast_forward/fast_forward/tests/data/GSH/interactions/mapped.tpr -i /Users/chrisbrasnett/Documents/GitHub/fast_forward/fast_forward/tests/data/GSH/GSH_initial.itp -max-dihedral 10 -interactions guess -dists -plots
+; /Users/chrisbrasnett/Documents/GitHub/fast_forward/.venv/bin/ff_inter -f /Users/chrisbrasnett/Documents/GitHub/fast_forward/examples/GSH/CG/mapped.xtc -s /Users/chrisbrasnett/Documents/GitHub/fast_forward/examples/GSH/interactions/mapped.tpr -i /Users/chrisbrasnett/Documents/GitHub/fast_forward/examples/GSH/GSH_initial.itp -max-dihedral 10 -interactions guess -dists -plots
 ; 
 
 ; Please cite the following papers:
