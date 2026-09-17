@@ -1,5 +1,7 @@
 import re
+import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from vermouth.tests.helper_functions import find_in_path
@@ -107,3 +109,45 @@ def test_ff_assess(tmp_path, monkeypatch, command_list):
         assert len(values) == len(atom_names)
         for score in values:
             assert 0.0 <= float(score) <= 1.0
+
+
+@pytest.mark.parametrize('missing_file, interactions_report_expected', [
+    # missing bonds/angles/dihedrals reference: ff_assess fails before it
+    # even gets to write report_interactions.out
+    ('CAC1_AMC1_bonds_distr.dat', False),
+    # missing distances reference: report_interactions.out is written first,
+    # then ff_assess fails while building the distance score matrix
+    ('1_CAC1_1_AMC1_distances_distr.dat', True),
+])
+def test_ff_assess_missing_reference(tmp_path, monkeypatch, missing_file, interactions_report_expected):
+    """
+    ff_assess must fail loudly when a reference distribution is missing,
+    rather than silently reporting a 0.00 ("identical") score for a
+    comparison that never actually happened.
+    """
+    monkeypatch.chdir(tmp_path)
+    ff_assess = find_in_path(names=('ff_assess', ))
+
+    broken_reference = tmp_path / 'reference'
+    broken_reference.mkdir()
+    for reference_file in Path(GSH_ASSESS_REFERENCE).glob('*.dat'):
+        if reference_file.name != missing_file:
+            shutil.copy(reference_file, broken_reference / reference_file.name)
+
+    command = [ff_assess, '-f', GSH_ASSESS_TRAJ, '-s', GSH_ASSESS_TPR,
+              '-i', GSH_ITP_OUTPUT, '-d', broken_reference]
+
+    proc = subprocess.run(command, cwd='.', timeout=60, check=False,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+
+    assert proc.returncode != 0
+    assert 'FileNotFoundError' in proc.stderr
+    assert missing_file in proc.stderr
+
+    # no misleading scores were written out for the comparison that failed
+    interactions_report = tmp_path / 'report_interactions.out'
+    distances_report = tmp_path / 'report_distances.out'
+    assert interactions_report.exists() == interactions_report_expected
+    assert not distances_report.exists()
