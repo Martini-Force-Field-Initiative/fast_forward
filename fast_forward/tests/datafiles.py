@@ -23,4 +23,8 @@ GSH_ITP_INTIIAL = TEST_DATA / 'GSH/GSH_initial.itp'
 GSH_ITP_OUTPUT = TEST_DATA / 'GSH/interactions/GSH.itp'
 GSH_DISTS = TEST_DATA / 'GSH/interactions/*.npy'
 
+GSH_ASSESS_TRAJ = TEST_DATA / 'GSH/assessment/simulated.xtc'
+GSH_ASSESS_TPR = TEST_DATA / 'GSH/assessment/simulated.tpr'
+GSH_ASSESS_REFERENCE = TEST_DATA / 'GSH/assessment/reference'
+
 del Path
