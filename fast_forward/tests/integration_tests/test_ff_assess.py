@@ -7,7 +7,10 @@ import pytest
 from vermouth.tests.helper_functions import find_in_path
 
 from fast_forward.tests.datafiles import (GSH_ASSESS_TRAJ, GSH_ASSESS_TPR, GSH_ITP_OUTPUT,
-                                          GSH_ASSESS_REFERENCE)
+                                          GSH_ASSESS_REFERENCE, HAVE_EXAMPLES_DATA,
+                                          MISSING_EXAMPLES_DATA_REASON)
+
+pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
 
 SCORE_LINE = re.compile(r'^\t(\S+)\s*:\s*([-\d.]+)\s*\(([-\d.]+)\)')
 SECTION_LINE = re.compile(r'^\[\s*(\w+)\s*\]')

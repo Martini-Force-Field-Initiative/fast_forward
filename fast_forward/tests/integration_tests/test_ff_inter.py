@@ -1,6 +1,7 @@
 import pytest
 
-from fast_forward.tests.datafiles import  GSH_CG_TPR, GSH_CG_TRAJ, GSH_ITP_INTIIAL, GSH_ITP_OUTPUT, GSH_DISTS
+from fast_forward.tests.datafiles import (GSH_CG_TPR, GSH_CG_TRAJ, GSH_ITP_INTIIAL, GSH_ITP_OUTPUT, GSH_DISTS,
+                                          HAVE_EXAMPLES_DATA, MISSING_EXAMPLES_DATA_REASON)
 
 import subprocess
 import numpy as np
@@ -8,6 +9,8 @@ from vermouth.tests.helper_functions import find_in_path
 from glob import glob
 from vermouth.tests.integration_tests.test_integration import compare_itp
 from pathlib import Path
+
+pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
 
 @pytest.mark.parametrize('command_list, reference_distributions',
                              ((['-f', GSH_CG_TRAJ,
