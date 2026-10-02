@@ -209,7 +209,9 @@ def _annotate_residues(cg, res):
     """
     for node in res:
         resname = res.nodes[node]["fragname"]
-        resid = res.nodes[node]["fragid"]
+        # the residue level is the top of the hierarchy, so its nodes carry
+        # no fragid; they are numbered in sequence order, which gives the resid
+        resid = res.nodes[node].get("fragid", node + 1)
         for cgnode in res.nodes[node]['graph'].nodes:
             cg.nodes[cgnode]["resname"] = resname
             cg.nodes[cgnode]["resid"] = resid
