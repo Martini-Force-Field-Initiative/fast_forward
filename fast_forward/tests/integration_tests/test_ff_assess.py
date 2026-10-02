@@ -176,3 +176,30 @@ def test_ff_assess_no_distance_references(tmp_path, monkeypatch):
     distances_report = tmp_path / 'report_distances.out'
     assert interactions_report.exists()
     assert not distances_report.exists()
+
+
+def test_ff_assess_interactions_only(tmp_path, monkeypatch):
+    """
+    '-interactions-only' should skip the distance assessment even when a
+    complete reference (including '*_distances_distr.dat' files) is
+    available, distinguishing a deliberate opt-out from the automatic skip
+    in test_ff_assess_no_distance_references.
+    """
+    monkeypatch.chdir(tmp_path)
+    ff_assess = find_in_path(names=('ff_assess', ))
+
+    command = [ff_assess, '-f', GSH_ASSESS_TRAJ, '-s', GSH_ASSESS_TPR,
+              '-i', GSH_ITP_OUTPUT, '-d', GSH_ASSESS_REFERENCE, '-interactions-only']
+
+    proc = subprocess.run(command, cwd='.', timeout=60, check=False,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+
+    assert proc.returncode == 0
+    assert "Skipping distance assessment ('-interactions-only' given)." in proc.stdout
+
+    interactions_report = tmp_path / 'report_interactions.out'
+    distances_report = tmp_path / 'report_distances.out'
+    assert interactions_report.exists()
+    assert not distances_report.exists()
