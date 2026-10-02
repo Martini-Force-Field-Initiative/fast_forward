@@ -95,6 +95,15 @@ For this reason, distances between constraints are weighted down when calculatin
 the top of the written report. To weight them the same as other, unconstrained, distances, the
 ``-include-constraints`` flag can be used.
 
+.. note::
+
+    This section relies on the ``*_distances_distr.dat`` reference files, which ``ff_inter`` only writes out
+    when run with ``-dist-matrix`` (see the :doc:`ff_inter_tutorial` tutorial), since computing every pairwise
+    distance in a molecule can be expensive for larger systems. If none of these reference files are present,
+    ``ff_assess`` skips this section automatically with a warning and still completes the interaction
+    assessment above. To skip it deliberately, for example while quickly iterating on interaction fitting,
+    pass ``-interactions-only``.
+
 As before, a distribution comparison figure is generated, comparing the reference intramolecular distances to
 the newly simulated ones:
 
