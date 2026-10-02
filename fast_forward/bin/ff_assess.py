@@ -114,7 +114,7 @@ def report_distances(score_matrix, molname, atom_names):
     with open('report_distances.out', 'w') as fout:
         fout.writelines(printable)
 
-def main():
+def _main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
     parser.add_argument('-f', type=str, dest="trajfile", help="simulated trajectory file")
     parser.add_argument('-s', type=str, dest="tprfile", help="simulated tpr file", default=None)
@@ -252,8 +252,11 @@ def main():
 
                     report_distances(score_m, molname, atom_names)
 
-if __name__ == '__main__':
+def main():
     try:
-        __main__()
+        _main()
     except FileNotFoundError as err:
         sys.exit(f"Error: {err}")
+
+if __name__ == '__main__':
+    main()
