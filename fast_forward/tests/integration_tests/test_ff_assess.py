@@ -4,8 +4,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import vermouth.forcefield
 from vermouth.tests.helper_functions import find_in_path
 
+from fast_forward.itp_parser_sub import read_itp
 from fast_forward.tests.datafiles import (GSH_ASSESS_TRAJ, GSH_ASSESS_TPR, GSH_ITP_OUTPUT,
                                           GSH_ASSESS_REFERENCE, HAVE_EXAMPLES_DATA,
                                           MISSING_EXAMPLES_DATA_REASON)
@@ -13,38 +15,6 @@ from fast_forward.tests.datafiles import (GSH_ASSESS_TRAJ, GSH_ASSESS_TPR, GSH_I
 pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
 
 SCORE_LINE = re.compile(r'^\t(\S+)\s*:\s*([-\d.]+)\s*\(([-\d.]+)\)')
-SECTION_LINE = re.compile(r'^\[\s*(\w+)\s*\]')
-ATOM_LINE = re.compile(r'^\s*\d+\s+\S+\s+(\d+)\s+\S+\s+(\S+)')
-COMMENT = re.compile(r';\s*(\S+)\s*$')
-
-
-def _parse_itp(itp_path):
-    """
-    Independently parse the itp file's own [ atoms ], [ bonds ], [ constraints ],
-    [ angles ] and [ dihedrals ] sections, to get the ground-truth set of atom
-    labels and interaction group names ff_assess should be scoring, without
-    relying on the reference distribution files or fast_forward's own itp
-    parsing machinery.
-    """
-    atoms = set()
-    groups = {'bonds': set(), 'angles': set(), 'dihedrals': set()}
-    section = None
-    for line in itp_path.read_text().splitlines():
-        section_match = SECTION_LINE.match(line)
-        if section_match:
-            section = section_match.group(1)
-            continue
-        if section == 'atoms':
-            atom_match = ATOM_LINE.match(line)
-            if atom_match:
-                resid, name = atom_match.groups()
-                atoms.add(f'{resid}_{name}')
-        elif section in ('bonds', 'constraints', 'angles', 'dihedrals'):
-            comment_match = COMMENT.search(line)
-            if comment_match:
-                key = 'bonds' if section == 'constraints' else section
-                groups[key].add(comment_match.group(1))
-    return atoms, groups
 
 
 @pytest.mark.parametrize('command_list', [['-f', GSH_ASSESS_TRAJ,
@@ -74,7 +44,20 @@ def test_ff_assess(tmp_path, monkeypatch, command_list):
     assert interactions_report.exists()
     assert distances_report.exists()
 
-    expected_atoms, expected_groups = _parse_itp(GSH_ITP_OUTPUT)
+    ff = vermouth.forcefield.ForceField("dummy")
+    with open(GSH_ITP_OUTPUT) as itp_file:
+        read_itp(itp_file.readlines(), ff)
+    _, block = next(iter(ff.blocks.items()))
+
+    expected_atoms = {f"{data['resid']}_{data['atomname']}" for _, data in block.nodes(data=True)}
+
+    expected_groups = {'bonds': set(), 'angles': set(), 'dihedrals': set()}
+    for section in ('bonds', 'constraints', 'angles', 'dihedrals'):
+        key = 'bonds' if section == 'constraints' else section
+        for interaction in block.interactions.get(section, []):
+            comment = interaction.meta.get('comment')
+            if comment:
+                expected_groups[key].add(comment)
 
     # every interaction group defined in the itp, per interaction type, is
     # scored and reported: nothing was silently skipped or spuriously added.
