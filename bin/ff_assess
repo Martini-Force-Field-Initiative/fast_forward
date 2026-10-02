@@ -3,6 +3,7 @@
 Main exe for scoring simulations against mapped trajectories
 """
 import argparse
+import sys
 from glob import glob
 from pathlib import Path
 import numpy as np
@@ -221,22 +222,32 @@ def __main__():
                 continue
             file_map[p.name] = p
 
-        for molname, block in ff.blocks.items():
-            score_m, plot_data = score_matrix(molname=molname, 
-                                   block=block, 
-                                   universe=u, 
-                                   file_map=file_map,
-                                   file_prefix=args.prefix,
-                                   hellinger_weight=args.hellinger_weight,
-                                   include_constraints=args.include_constraints)
-            
-            atom_names = [f'{resid}_{name}' for (_, name), (_, resid) in zip(block.nodes(data='atomname'), block.nodes(data='resid'))]
+        if not any(name.endswith('_distances_distr.dat') for name in file_map):
+            print("WARNING: no '*_distances_distr.dat' reference files found in "
+                 f"'{args.reference}'; skipping distance assessment. Re-run ff_inter "
+                 "with '-dist-matrix' to generate them.")
+        else:
+            for molname, block in ff.blocks.items():
+                score_m, plot_data = score_matrix(molname=molname,
+                                       block=block,
+                                       universe=u,
+                                       file_map=file_map,
+                                       file_prefix=args.prefix,
+                                       hellinger_weight=args.hellinger_weight,
+                                       include_constraints=args.include_constraints)
 
-            if args.plots:
-                make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
-                make_distances_distribution_plot(
-                    plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
-                )
+                atom_names = [f'{resid}_{name}' for (_, name), (_, resid) in zip(block.nodes(data='atomname'), block.nodes(data='resid'))]
 
-            report_distances(score_m, molname, atom_names)
-__main__()
+                if args.plots:
+                    make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
+                    make_distances_distribution_plot(
+                        plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
+                    )
+
+                report_distances(score_m, molname, atom_names)
+
+if __name__ == '__main__':
+    try:
+        __main__()
+    except FileNotFoundError as err:
+        sys.exit(f"Error: {err}")

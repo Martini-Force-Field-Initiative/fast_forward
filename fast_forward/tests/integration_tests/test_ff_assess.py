@@ -129,11 +129,50 @@ def test_ff_assess_missing_reference(tmp_path, monkeypatch, missing_file, intera
                           universal_newlines=True)
 
     assert proc.returncode != 0
-    assert 'FileNotFoundError' in proc.stderr
+    assert 'Error:' in proc.stderr
     assert missing_file in proc.stderr
+    # a clean, one-line error message, not a raw Python traceback
+    assert 'Traceback' not in proc.stderr
 
     # no misleading scores were written out for the comparison that failed
     interactions_report = tmp_path / 'report_interactions.out'
     distances_report = tmp_path / 'report_distances.out'
     assert interactions_report.exists() == interactions_report_expected
+    assert not distances_report.exists()
+
+
+def test_ff_assess_no_distance_references(tmp_path, monkeypatch):
+    """
+    -dist-matrix is opt-in for ff_inter, so a reference folder built without
+    it has no '*_distances_distr.dat' files at all. ff_assess should treat
+    this as an intentional opt-out and skip the distance assessment with a
+    clear warning, rather than failing like it does for a partial/broken
+    reference folder (see test_ff_assess_missing_reference).
+    """
+    monkeypatch.chdir(tmp_path)
+    ff_assess = find_in_path(names=('ff_assess', ))
+
+    reference_without_distances = tmp_path / 'reference'
+    reference_without_distances.mkdir()
+    for reference_file in Path(GSH_ASSESS_REFERENCE).glob('*.dat'):
+        if 'distances' not in reference_file.name:
+            shutil.copy(reference_file, reference_without_distances / reference_file.name)
+
+    command = [ff_assess, '-f', GSH_ASSESS_TRAJ, '-s', GSH_ASSESS_TPR,
+              '-i', GSH_ITP_OUTPUT, '-d', reference_without_distances]
+
+    proc = subprocess.run(command, cwd='.', timeout=60, check=False,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+
+    assert proc.returncode == 0
+    assert 'distances_distr.dat' in proc.stdout
+    assert '-dist-matrix' in proc.stdout
+
+    # the interaction assessment still runs and is reported; the distance
+    # assessment is cleanly skipped rather than failing
+    interactions_report = tmp_path / 'report_interactions.out'
+    distances_report = tmp_path / 'report_distances.out'
+    assert interactions_report.exists()
     assert not distances_report.exists()
