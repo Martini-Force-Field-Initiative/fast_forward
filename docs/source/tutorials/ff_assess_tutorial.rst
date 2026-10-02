@@ -5,7 +5,7 @@ As previously indicated, ``ff_assess`` is a powerful tool to help assess a new
 CG model's validity against a reference simulation. This tutorial follows from
 the :doc:`ff_inter_tutorial` tutorial
 
-Prepared simulations of the GSH model are found in the `assessment <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/assessment>`_
+Prepared simulations of the GSH model are found in the `assessment <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/examples/GSH/assessment>`_
 folder of the example directory, if you have not conducted your own simulation.
 
 Assuming something like the following directory structure, we can run ``ff_assess`` using the
@@ -40,7 +40,7 @@ Running ``ff_assess`` from the assessment directory:
 
 .. code-block::
 
-    ff_assess -f simulated.xtc -s simulated.tpr -i ../first_simulation/GSH.itp -d ../mapping_and_interactions/ -plots
+    ff_assess -f simulated.xtc -s simulated.tpr -i ../first_simulation/GSH.itp -d ../mapping_and_interactions/ -plots -plot-data
 
 Upon successful completion, the program will generate several comparison figures and scoring reports.
 
@@ -58,7 +58,7 @@ As well as a report with the scoring function:
 .. code-block::
 
      [ Interaction Distribution Report ]
-       Overall Score : 0.39 ± 0.08
+       Overall Score : 0.368 ± 0.0234
 
      Interaction Scores:
      0 - identical, 1 - no overlap
@@ -71,9 +71,9 @@ As well as a report with the scoring function:
             Hellinger distance (Scoring function)
 
      bonds
-        CAC1_AMC1           : 0.33 (0.25)
-        AMD1_SUL1           : 0.41 (0.45)
-        AMD1_AMD2           : 0.20 (0.17)
+        CAC1_AMC1           : 0.42 (0.44)
+        AMD1_SUL1           : 0.66 (0.50)
+        AMD1_AMD2           : 0.40 (0.43)
      ...
 
 As described above, the report contains both the Hellinger distance and the modified scoring function scores
@@ -89,11 +89,20 @@ Distance distribution assessment
 To ensure good conformational sampling by the new model, ``ff_assess`` also generates distribution comparisons for
 intramolecular distances in the newly simulated trajectory against their references. Distance scoring can be used
 to indicate where interactions are missing from the model. In further optimisation, these interactions could be
-introduced to better reproduce the molecular conformational ensemble. Where constraints are present in the system
-(as in the AMD1-AMC1 bead distance shown below), this may result in distance distributions that are not possible to
-resolve, and therefore result in high scores. For this reason, distances between constraints are normally excluded
-from the overall score reported at the top of the written report. To include them, the ``-include-constraints``
-flag can be used.
+introduced to better reproduce the molecular conformational ensemble. Where constraints are present in the system,
+this may result in distance distributions that are not possible to resolve, and therefore result in high scores.
+For this reason, distances between constraints are weighted down when calculating the overall score reported at
+the top of the written report. To weight them the same as other, unconstrained, distances, the
+``-include-constraints`` flag can be used.
+
+.. note::
+
+    This section relies on the ``*_distances_distr.dat`` reference files, which ``ff_inter`` only writes out
+    when run with ``-dist-matrix`` (see the :doc:`ff_inter_tutorial` tutorial), since computing every pairwise
+    distance in a molecule can be expensive for larger systems. If none of these reference files are present,
+    ``ff_assess`` skips this section automatically with a warning and still completes the interaction
+    assessment above. To skip it deliberately, for example while quickly iterating on interaction fitting,
+    pass ``-interactions-only``.
 
 As before, a distribution comparison figure is generated, comparing the reference intramolecular distances to
 the newly simulated ones:
@@ -109,9 +118,9 @@ The scoring matrix is also saved as a report:
 .. code-block::
 
      [ Distance Distribution Report for GSH ]
-      Overall Score : 0.37 ± 0.05
+      Overall Score : 0.316 ± 0.0149
 
-       Max Score : 0.99
+       Max Score : 0.49
 
      Score guide:
        0.0-0.3 : good
@@ -121,13 +130,13 @@ The scoring matrix is also saved as a report:
        Score Matrix:
      0 - identical, 1 - no overlap
 
-           CAC1  AMC1  AMD1  SUL1  AMD2  CAC2
-     CAC1  0.00  0.23  0.17  0.17  0.15  0.27
-     AMC1  0.23  0.00  0.99  0.15  0.22  0.26
-     AMD1  0.17  0.99  0.00  0.43  0.16  0.48
-     SUL1  0.17  0.15  0.43  0.00  0.84  0.24
-     AMD2  0.15  0.22  0.16  0.84  0.00  0.79
-     CAC2  0.27  0.26  0.48  0.24  0.79  0.00
+          1_CAC1 1_AMC1 1_AMD1 1_SUL1 1_AMD2 1_CAC2
+    1_CAC1  0.00  0.40  0.29  0.43  0.25  0.27
+    1_AMC1  0.40  0.00  0.24  0.33  0.29  0.34
+    1_AMD1  0.29  0.24  0.00  0.49  0.39  0.33
+    1_SUL1  0.43  0.33  0.49  0.00  0.25  0.26
+    1_AMD2  0.25  0.29  0.39  0.25  0.00  0.18
+    1_CAC2  0.27  0.34  0.33  0.26  0.18  0.00
 
 
 

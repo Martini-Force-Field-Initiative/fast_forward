@@ -312,7 +312,7 @@ class InteractionFitter:
 
         else:
             # transform the centre back into the correct domain after fitting to account for periodicity.
-            c0 = (gaussian_result.params['center'].value + (2*np.pi)) % (2*np.pi) - np.pi
+            c0 = (gaussian_result.params['center'].value + np.pi) % (2*np.pi) - np.pi
 
             center = np.round(c0, self.precision)
             sigma = np.round((self.kb * self.temperature) / ((gaussian_result.params['sigma']) ** 2), self.precision)

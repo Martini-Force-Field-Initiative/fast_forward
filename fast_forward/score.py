@@ -105,10 +105,11 @@ def score_matrix(molname, block, universe, file_map: dict, file_prefix: str, hel
             try:
                 ref_file = file_map[reference_name]
             except KeyError:
-                print(f"{group_name} file not found! If your prefix ends with numbers, this could be the reason.")
+                msg = f"{reference_name} file not found!"
                 if file_prefix == "":
-                    print("your prefix is set to the default value: consider changing it to the actual prefix.")
-                continue
+                    msg += (" your prefix is set to the default value: consider changing it to the "
+                            "actual prefix.")
+                raise FileNotFoundError(msg) from None
 
             reference_data = np.genfromtxt(ref_file)
             
