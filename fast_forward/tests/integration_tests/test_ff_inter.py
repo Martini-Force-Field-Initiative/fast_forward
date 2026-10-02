@@ -50,8 +50,7 @@ def test_ff_inter(tmp_path, monkeypatch, command_list, reference_distributions):
     # ensure identical distributions for each
     for f0, f1 in zip(sorted(list(set([Path(i) for i in reference_dats]))),
                       sorted(list(set([i.name for i in output_dats])))):
-        with open(f0, 'rb') as f:
-            data0 = np.load(f)
+        data0 = np.loadtxt(f0)
         data1 = np.loadtxt(f1)
         assert np.allclose(data0, data1, atol=1e-3)
 

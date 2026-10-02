@@ -26,7 +26,7 @@ GSH_MAP = EXAMPLES_DATA / 'GSH.map'
 
 GSH_ITP_INTIIAL = EXAMPLES_DATA / 'GSH_initial.itp'
 GSH_ITP_OUTPUT = EXAMPLES_DATA / 'interactions/GSH.itp'
-GSH_DISTS = EXAMPLES_DATA / 'interactions/*.npy'
+GSH_DISTS = EXAMPLES_DATA / 'interactions/*.dat'
 
 GSH_ASSESS_TRAJ = EXAMPLES_DATA / 'assessment/simulated.xtc'
 GSH_ASSESS_TPR = EXAMPLES_DATA / 'assessment/simulated.tpr'
