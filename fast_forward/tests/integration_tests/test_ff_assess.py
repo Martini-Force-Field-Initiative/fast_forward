@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 import vermouth.forcefield
-from vermouth.tests.helper_functions import find_in_path
 
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.tests.datafiles import (GSH_ASSESS_TRAJ, GSH_ASSESS_TPR, GSH_ITP_OUTPUT,
@@ -24,7 +23,7 @@ SCORE_LINE = re.compile(r'^\t(\S+)\s*:\s*([-\d.]+)\s*\(([-\d.]+)\)')
 def test_ff_assess(tmp_path, monkeypatch, command_list):
 
     monkeypatch.chdir(tmp_path)
-    ff_assess = find_in_path(names=('ff_assess', ))
+    ff_assess = shutil.which('ff_assess')
 
     command = [ff_assess, ] + command_list
 
@@ -112,7 +111,7 @@ def test_ff_assess_missing_reference(tmp_path, monkeypatch, missing_file, intera
     comparison that never actually happened.
     """
     monkeypatch.chdir(tmp_path)
-    ff_assess = find_in_path(names=('ff_assess', ))
+    ff_assess = shutil.which('ff_assess')
 
     broken_reference = tmp_path / 'reference'
     broken_reference.mkdir()
@@ -150,7 +149,7 @@ def test_ff_assess_no_distance_references(tmp_path, monkeypatch):
     reference folder (see test_ff_assess_missing_reference).
     """
     monkeypatch.chdir(tmp_path)
-    ff_assess = find_in_path(names=('ff_assess', ))
+    ff_assess = shutil.which('ff_assess')
 
     reference_without_distances = tmp_path / 'reference'
     reference_without_distances.mkdir()
@@ -186,7 +185,7 @@ def test_ff_assess_interactions_only(tmp_path, monkeypatch):
     in test_ff_assess_no_distance_references.
     """
     monkeypatch.chdir(tmp_path)
-    ff_assess = find_in_path(names=('ff_assess', ))
+    ff_assess = shutil.which('ff_assess')
 
     command = [ff_assess, '-f', GSH_ASSESS_TRAJ, '-s', GSH_ASSESS_TPR,
               '-i', GSH_ITP_OUTPUT, '-d', GSH_ASSESS_REFERENCE, '-interactions-only']

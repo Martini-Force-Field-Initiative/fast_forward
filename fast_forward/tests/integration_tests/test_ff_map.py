@@ -6,7 +6,7 @@ from fast_forward.tests.datafiles import (GSH_AA_TPR, GSH_AA_TRAJ, GSH_CG_GRO, G
 import subprocess
 import numpy as np
 from MDAnalysis import Universe
-from vermouth.tests.helper_functions import find_in_path
+import shutil
 import pytest
 
 pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_
 def test_ff_map(tmp_path, monkeypatch, command_list, output_top, output_traj):
 
     monkeypatch.chdir(tmp_path)
-    ff_map = find_in_path(names=('ff_map', ))
+    ff_map = shutil.which('ff_map')
     command = [ff_map, ] + command_list
 
     proc = subprocess.run(command, cwd='.', timeout=60, check=False,

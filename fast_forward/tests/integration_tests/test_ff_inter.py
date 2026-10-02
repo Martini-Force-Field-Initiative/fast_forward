@@ -5,9 +5,9 @@ from fast_forward.tests.datafiles import (GSH_CG_TPR, GSH_CG_TRAJ, GSH_ITP_INTII
 
 import subprocess
 import numpy as np
-from vermouth.tests.helper_functions import find_in_path
+import shutil
 from glob import glob
-from vermouth.tests.integration_tests.test_integration import compare_itp
+from fast_forward.tests.helper_functions import compare_itp
 from pathlib import Path
 
 pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_
 def test_ff_inter(tmp_path, monkeypatch, command_list, reference_distributions):
 
     monkeypatch.chdir(tmp_path)
-    ff_inter = find_in_path(names=('ff_inter', ))
+    ff_inter = shutil.which('ff_inter')
 
     command = [ff_inter, ] + command_list
 

@@ -3,3 +3,93 @@ requires = [
         "wheel",
         "setuptools >= 30.3.0",
     ]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "fast_forward"
+dynamic = ["version"]
+description = "Fast-Forward: Automatic Assignment and Assessment of Bonded Parameters for the Martini Force Field"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Chris Brasnett"},
+    {name = "Maximilian Fidlin"},
+    {name = "Thilo Duve"},
+    {name = "Sebastian Thallmair"},    
+    {name = "Siewert J Marrink"},
+    {name = "Fabian Grünewald"},
+]
+maintainers = [
+    {name = "Fabian Grünewald"},
+    {name = "Chris Brasnett"},
+    {name = "Thilo Duve"},
+]
+keywords = ["martini", "MD", "martinize", "coarse grained molecular dynamics"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+
+readme = {file = "README.md", content-type = "text/markdown; charset=UTF-8"}
+requires-python= ">= 3.11"
+dependencies = [
+    "pbr",
+    "numpy",
+    "tqdm",
+    "vermouth>=0.5.0",
+    "numba",
+    "MDAnalysis",
+    "cgsmiles",
+    "lmfit",
+]
+
+[project.urls]
+Repository = "https://github.com/Martini-Force-Field-Initiative/fast_forward"
+Issues = "https://github.com/Martini-Force-Field-Initiative/fast_forward/issues"
+Documentation = "https://ffwd.readthedocs.io/en/latest/"
+Article = "https://pubs.acs.org/jcisd8/article-abstract/doi/10.1021/acs.jcim.6c01107/5275812/"
+
+[project.optional-dependencies]
+numba = ["numba"]
+
+[dependency-groups]
+docs = [
+    "sphinx >= 1.8.0",
+    "sphinxcontrib-apidoc",
+    "pbr",
+    "setuptools >= 30.3.0",
+    "numpy",
+    "networkx ~= 2.0",
+    "scipy",
+]
+tests = [
+    "pytest",
+    "coverage",
+    "pytest-cov",
+    "pylint",
+    "codecov",
+    "tqdm",
+]
+
+[project.scripts]
+ff_map = "fast_forward.bin.ff_map:main"
+ff_inter = "fast_forward.bin.ff_inter:main"
+ff_assess = "fast_forward.bin.ff_assess:main"
+
+[tool.setuptools.packages.find]
+where = ['.']
+include = ["fast_forward*"]
+exclude = ["fast_forward.tests*"]
+namespaces = false
+
+[tool.setuptools_scm]  
+
+# [tool.setuptools.package-data]
+# fast_forward = ["fast_forward/tests/data/*"]
