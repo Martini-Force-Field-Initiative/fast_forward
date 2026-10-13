@@ -27,15 +27,15 @@ def _is_part_of_dihedral(angle_atoms, dihedrals):
     bool
         True if angle is part of a dihedral, False otherwise
     """
-    match = False
     for dih in dihedrals:
-        match = (
+        if (
             np.array_equal(angle_atoms, dih[0:3]) or
             np.array_equal(angle_atoms, dih[1:4]) or
             np.array_equal(angle_atoms[::-1], dih[0:3]) or
             np.array_equal(angle_atoms[::-1], dih[1:4])
-        )
-    return match
+        ):
+            return True
+    return False
 
 def _gaussian_fitter(x, y, initial_center, initial_sigma, initial_amplitude):
     """
