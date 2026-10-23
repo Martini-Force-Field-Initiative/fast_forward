@@ -28,6 +28,7 @@ from fast_forward.mapping import create_new_universe, forward_map_positions, for
 from fast_forward.universe_handler import UniverseHandler
 from fast_forward.map_file_parers import read_mapping
 from fast_forward.cgsmiles import cgsmiles_to_mapping, load_cgsmiles_library
+from fast_forward.sasa import calc_SASA
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
@@ -48,6 +49,7 @@ def main():
                             help='trajectory file (XTC/TRR/GRO/PDB ...)')
     file_group.add_argument('-s', dest='tpr', required=True, type=str,
                             help='tpr file (TPR)')
+    file_group.add_argument('-pref', type=str, dest="prefix", help="common prefix to filename", default="")
     file_group.add_argument('-cgs', dest='cgsmiles_strs', type=str, nargs='*',
                             help='any number of cgsmiles strings.')
     file_group.add_argument('-cgsl', dest='cgsmiles_library', type=str,
@@ -57,7 +59,11 @@ def main():
     file_group.add_argument('-o', dest='outpath', type=str, required=True,
                             help='name of the mapped trajectory (XTC/GRO). If trajectory, first frame will also be '
                                  'written as a separate gro file')
-
+    file_group.add_argument('-sasa', default=None, const=".", nargs="?",
+							dest="sasa",
+							help="Calculate the solvent accessible surface area (SASA) of the system. Save text files with time series and distribution data. " \
+							"Optionally provide a path (default: current dir). The path should be the same directory as you use with ff_inter -dists.")
+	
     mapping_group = parser.add_argument_group('Mapping Options')
     mapping_group.add_argument('-mode', dest='mode', required=False, type=str,
                                help='COG or COM mapping', default='COG')
@@ -100,6 +106,12 @@ def main():
         treated_atoms = init_universe.shift_united_atom_carbons(dict(args.h_association))
     else:
         treated_atoms = np.array([])
+
+    if args.sasa:
+        for mol_name in init_universe.mol_names:
+            print(f"INFO - Calculating SASA for {mol_name}")
+            mol_atoms = init_universe.select_atoms(f"moltype {mol_name}")
+            calc_SASA(mol_atoms, args.sasa, mol_name, f"{args.prefix}", cg=False)
 
     print("INFO - Loading mapping files")
     #determine if we have a single .mapping file or a directory of .map files

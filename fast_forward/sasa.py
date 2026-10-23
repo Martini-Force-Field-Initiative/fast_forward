@@ -69,7 +69,7 @@ CG_RADII= {
 'VS': 0.000,# Virtual site, no radius
 }
 
-def calc_SASA(ag, dir, prefix, cg=False):
+def calc_SASA(ag, dir, mol_name, prefix, cg=False):
 	'''
 	Calculate the solvent accessible surface area (SASA) of an MDAnalysis AtomGroup using MDTraj's shrake_rupley algorithm.
 	'''
@@ -93,7 +93,7 @@ def calc_SASA(ag, dir, prefix, cg=False):
 			print(f"\nPhosphorus atoms use atomistic van der Waals radii from:\n{cite_string}\n")
 
 	np.savetxt("{dir}/{prefix}{name}_{inter_type}.dat".format(dir=dir,
-														name=group_name,
+	                                                	name=mol_name,
 														inter_type='sasa',
 														prefix=prefix),
 				sasa)
@@ -101,7 +101,7 @@ def calc_SASA(ag, dir, prefix, cg=False):
 	center_points = edges[:-1] + np.diff(edges)/2.
 	distr = np.transpose((center_points, probs))
 	np.savetxt("{dir}/{prefix}{name}_{inter_type}_distr.dat".format(dir=dir,
-																name=group_name,
+																name=mol_name,
 																inter_type='sasa',
 																prefix=prefix),
 				distr)
