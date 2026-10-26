@@ -11,72 +11,52 @@ from .interaction_distribution import INTERACTIONS
 X_LABELS={'bonds': 'Distance [Å]',
           'angles': 'Angle [°]',
           'dihedrals': 'Angle [°]',
-          'distances': 'Distance [Å]'}
+          'distances': 'Distance [Å]',
+          'sasa': 'SASA [nm²]'}
 
-def _plotter(data, atom_list, inter_type, ax):
-
-    cols = ['#6970E0', '#E06B69']
-    needed_keys = [key for key in list(data.keys()) if key != 'x']
-    for idx, key in enumerate(needed_keys):
-        ax.plot(data['x'],
-                data[key],
-                c=cols[idx],
-                label=key)
-    ax.legend()
-    ax.set_title(f'{atom_list} {inter_type}')
-    ax.set_xlim(INTERACTIONS[inter_type].get('bins')[0],
-                INTERACTIONS[inter_type].get('bins')[-1])
-    ax.set_xlabel(X_LABELS[inter_type])
-
-
-def _plotter_distance_distribution(data, ax, y_lower_threshold: float = 0.01):
+def _plotter(data, title, inter_type, ax, y_lower_threshold: float = 0.01, show_legend: bool = True):
     """
-    Plot distance distribution curves and automatically zoom in on
+    Plot distribution curves.
+    If a y_lower_threshold is bigger than 0, the plot will automatically zoom in on
     regions where the signal exceeds a given fraction of its maximum.
-
-    Parameters
-    ----------
-    data : dict
-        Dictionary containing the distance distribution data.
-        Must include a key ``"x"`` for the shared x-axis values.
-        All other keys correspond to y-data series to be plotted and
-        must be array-like and of the same length as ``data["x"]``.
-    ax : :class:`matplotlib.axes._axes.Axes`
-        Axes object on which the curves will be plotted.
-    y_lower_threshold : float, optional
-        Fraction of each curve's maximum used to determine the
-        region of interest. Only x-values where ``y > y.max() * threshold``
-        are considered when computing the zoomed x-axis limits.
-        Default is ``0.01``
     """
+    if y_lower_threshold > 0:
+        x_min = 100
+        x_max = 0
+        x_pad = 0.25
     cols = ['#6970E0', '#E06B69']
     needed_keys = [key for key in list(data.keys()) if key != 'x']
-    x_min = 100
-    x_max = 0
-    x_pad = 0.25
-
     for idx, key in enumerate(needed_keys):
         ax.plot(data['x'],
                 data[key],
                 c = cols[idx],
                 label=key)
-        threshold = np.max(data[key]) * y_lower_threshold
-        significant_indices = np.where(data[key] > threshold)[0]
+        if y_lower_threshold > 0:
+            threshold = np.max(data[key]) * y_lower_threshold
+            significant_indices = np.where(data[key] > threshold)[0]
 
-        if significant_indices.size > 0: # Only update if we found significant data
-            x_min = np.min([x_min, data['x'][np.min(significant_indices)]])
-            x_max = np.max([x_max, data['x'][np.max(significant_indices)]])
-    ax.yaxis.set_ticks([])
-    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+            if significant_indices.size > 0: # Only update if we found significant data
+                x_min = np.min([x_min, data['x'][np.min(significant_indices)]])
+                x_max = np.max([x_max, data['x'][np.max(significant_indices)]])
+    if y_lower_threshold > 0:
+        ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    else:
+        ax.set_xlim(INTERACTIONS[inter_type].get('bins')[0],
+                    INTERACTIONS[inter_type].get('bins')[-1])
+        
+    if show_legend:
+        ax.legend()
+    ax.set_title(title)
+    ax.set_xlabel(X_LABELS.get(inter_type, ''))
 
-def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='distribution_plots'):
+def make_distribution_plot(plot_data, save_plot_data=None, axarr=None, name='distribution_plots'):
     '''
 
     Parameters
     ----------
-    fit_data: dict
-        Dictionary containing distributions and fitting parameters for interactions.
-        Nested as {interaction_type: {group_name: {'data': distribution, 'fitted_params': list(params)}}
+    plot_data: dict
+        Dictionary containing reference and simulated/fitted parameters for interactions, distances or sasa.
+        Nested as {interaction_type: {group_name: {'x': x_values, 'Reference': distribution, 'Simulated/Fitted': distribution}}
     axarr: :class:`matplotlib.axes._axes.Axes`
         array of axes to plot the fitted distributions on
     save_plot_data: bool
@@ -85,7 +65,7 @@ def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='dist
         name of the output file (default: distribution_plots)
     '''
 
-    total_interactions = sum([len(fit_data[i]) for i in fit_data.keys()])
+    total_interactions = sum([len(plot_data[i]) for i in plot_data.keys()])
 
     if not axarr:
         ncols = 5
@@ -97,9 +77,13 @@ def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='dist
                                figsize=(ncols*4, nrows*4))
 
     count = 0
-    for interaction_type in fit_data.keys():
-        for atom_list in fit_data[interaction_type].keys():
-            _plotter(fit_data[interaction_type][atom_list], atom_list, interaction_type, axarr.flatten()[count])
+    for interaction_type in plot_data.keys():
+        if interaction_type == 'dihedrals':
+            y_lower_threshold = 0 # dont zoom in on dihedrals
+        else:
+            y_lower_threshold = 0.01 
+        for atom_list in plot_data[interaction_type].keys():
+            _plotter(plot_data[interaction_type][atom_list], f'{atom_list} {interaction_type}', interaction_type, axarr.flatten()[count], y_lower_threshold=y_lower_threshold)
             count += 1
 
     # set ylabel
@@ -110,7 +94,7 @@ def make_distribution_plot(fit_data, save_plot_data=None, axarr=None, name='dist
         axarr[0].set_ylabel('Probability Density')
 
     if save_plot_data:
-        pickle.dump(fit_data, open('plot_data.p', 'wb'))
+        pickle.dump(plot_data, open('plot_data.p', 'wb'))
 
     # remove unused axes
     for ax in axarr.flatten()[count:]:
@@ -186,7 +170,7 @@ def make_distances_distribution_plot(plot_data, atom_names, save_plot_data=False
             if i < j: # plot only upper triangle of the matrix
                 atoms_key = f'{resid1}_{name1}_{resid2}_{name2}'
                 if atoms_key in plot_data['distances']:
-                    _plotter_distance_distribution(plot_data['distances'][atoms_key], ax)
+                    _plotter(plot_data['distances'][atoms_key], title='', inter_type='distances', ax=ax, show_legend=False)
             else:
                 fig.delaxes(ax) # remove lower triangle of the matrix
     

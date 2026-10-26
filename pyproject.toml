@@ -58,6 +58,7 @@ Article = "https://pubs.acs.org/jcisd8/article-abstract/doi/10.1021/acs.jcim.6c0
 
 [project.optional-dependencies]
 numba = ["numba"]
+sasa = ["mdtraj"]
 
 [dependency-groups]
 docs = [

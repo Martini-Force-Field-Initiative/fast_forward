@@ -26,7 +26,9 @@ INTERACTIONS = {'bonds': {'bins': np.arange(0, 7, 0.01)
                                    'array_shape': {'virtual_sites3': 2,
                                                    'virtual_sites3fd': 2,
                                                    'virtual_sites3out': 3}
-                                   }
+                                   },
+                'sasa': {'bins': np.arange(0, 50, 0.01)
+                }
                 }
 VS_TYPES = [key for key in INTERACTIONS.keys() if 'virtual' in key]
 RECOGNISED_INTERACTIONS = list(INTERACTIONS.keys())
