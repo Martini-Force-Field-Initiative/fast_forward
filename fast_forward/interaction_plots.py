@@ -11,7 +11,8 @@ from .interaction_distribution import INTERACTIONS
 X_LABELS={'bonds': 'Distance [Å]',
           'angles': 'Angle [°]',
           'dihedrals': 'Angle [°]',
-          'distances': 'Distance [Å]'}
+          'distances': 'Distance [Å]',
+          'sasa': 'SASA [nm²]'}
 
 def _plotter(data, atom_list, inter_type, ax):
 

@@ -14,6 +14,7 @@ from fast_forward.interaction_distribution import interaction_distribution
 from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
+from fast_forward.sasa import calc_SASA
 from fast_forward.score import hellinger, score_matrix, calc_score
 from collections import defaultdict
 
@@ -69,6 +70,47 @@ def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
 
     print(printable)
     with open('report_interactions.out', 'w') as fout:
+        fout.writelines(printable)
+
+def report_sasa(h_score_dict, score_dict):
+    """
+    Print out a report of the sasa.
+
+    Parameters
+    ----------
+    score_dict : dict
+        Dictionary with interaction types as keys and another dictionary as values.
+    h_score_dict : dict
+        Dictionary with interaction types as keys and another dictionary as values.
+    """
+
+    buff = ''
+
+    buff += " [ Solvent Accessible Surface Area (SASA) Report ]\n"
+
+    buff += f"   Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
+
+    buff += " Interaction Scores:\n"
+    buff += " 0 - identical, 1 - no overlap\n\n"
+
+    buff += " Score guide:\n"
+    buff += "   0.0-0.3 : good\n"
+    buff += "   0.3-0.5 : ok\n"
+    buff += "   0.5-1.0 : bad\n\n"
+    buff += "\t\tHellinger distance (Scoring function)\n"
+
+    overall_scores = []
+
+    for molname, h_score in h_score_dict.items():
+        score = score_dict[molname]
+        buff += f"\t{molname:20s}: {h_score:.2f} ({score:.2f})\n"
+        overall_scores.append(score)
+    printable = buff.format(mean=np.array(overall_scores).mean(),
+                            sem=np.array(overall_scores).std()/np.sqrt(len(overall_scores))
+                            )
+
+    print(printable)
+    with open('report_sasa.out', 'w') as fout:
         fout.writelines(printable)
 
 
@@ -136,6 +178,9 @@ def _main():
     parser.add_argument('-dists', default=None, const=".", nargs="?",
                         dest="distribution_data",
                         help="Save text files with time series and distribution data for interactions. Optionally provide a path (default: current dir).")
+    parser.add_argument('-sasa', default=None, const=".", nargs="?",
+                        dest="sasa",
+                        help="Calculate the solvent accessible surface area (SASA) of the system.")
     parser.add_argument('-interactions-only', default=False, action='store_true', dest='interactions_only',
                         help="Only assess bonded interaction distributions (bonds, angles, dihedrals); skip "
                              "the pairwise distance assessment entirely.")
@@ -252,6 +297,47 @@ def _main():
 
                     report_distances(score_m, molname, atom_names)
 
+        if args.sasa:
+            if args.plot_data:
+                plot_data = defaultdict(dict) # initialize only if needed
+            h_score_dict = {}
+            score_dict = {}
+            print("Evaluating SASA.")
+            for molname, _ in ff.blocks.items():
+                print(f"INFO - Calculating SASA for {molname}")
+                mol_atoms = u.select_atoms(f"moltype {molname}")
+                distr = calc_SASA(mol_atoms, molname, prefix =f"{args.prefix}", cg=True, save=args.distribution_data)
+
+                probs = distr.T[1]
+                # read in reference distribution
+                reference_name = f"{args.prefix}{molname}_sasa_distr.dat"
+                try:
+                    ref_file = file_map[reference_name]
+                except KeyError:
+                    msg = f"{reference_name} file not found!"
+                    if args.prefix == "":
+                        msg += (" your prefix is set to the default value: consider changing it to the "
+                                "actual prefix.")
+                    raise FileNotFoundError(msg) from None
+
+                reference_data = np.genfromtxt(ref_file)
+                # calculate hellinger distance between simulated and reference distributions
+                h_score_dict[molname] = hellinger(probs/probs.sum(), reference_data.T[1] / reference_data.T[1].sum())
+                score_dict[molname] = calc_score(
+                    reference_data.T[1]/ reference_data.T[1].sum(), probs/probs.sum(), 
+                    [args.hellinger_weight, 1-args.hellinger_weight], 'sasa'
+                    )
+               
+                if args.plot_data:
+                    print(f"Saving SASA distribution data for {molname} to plot_data dictionary.")
+                    plot_data['sasa'][molname] = {"x": reference_data.T[0],
+                                                        "Reference": reference_data.T[1],
+                                                        'Simulated': probs}
+            if args.plots:
+                make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions')
+                    
+            report_sasa(h_score_dict, score_dict)
+            
 def main():
     try:
         _main()

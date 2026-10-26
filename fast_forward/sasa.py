@@ -7,6 +7,27 @@ from vermouth.citation_parser import citation_formatter, read_bib
 from collections import ChainMap
 from fast_forward.interaction_distribution import INTERACTIONS
 
+AA_RADII = {
+	'H': 0.109,
+	'C': 0.175,
+	'N': 0.161,
+	'O': 0.156,
+	'F': 0.144,
+	'P': 0.180,
+	'S': 0.179,
+	'Cl': 0.174,
+	'Br': 0.185,
+	'I': 0.200,
+	}
+
+CG_RADII= {
+'T': 0.191, # tiny bead
+'S': 0.230, # small bead
+'R': 0.264, # regular bead
+'U': 0.000, # Dummy bead, no radius
+'VS': 0.000,# Virtual site, no radius
+}
+
 def mda_to_mdtraj(ag, cg=False):
 	'''
 	Convert an MDAnalysis AtomGroup to an MDTraj Trajectory.
@@ -48,28 +69,7 @@ def mda_to_mdtraj(ag, cg=False):
 						 unitcell_lengths=np.array(lengths) if lengths else None,
 						 unitcell_angles=np.array(angles) if angles else None)
 
-AA_RADII = {
-	'H': 0.109,
-	'C': 0.175,
-	'N': 0.161,
-	'O': 0.156,
-	'F': 0.144,
-	'P': 0.180,
-	'S': 0.179,
-	'Cl': 0.174,
-	'Br': 0.185,
-	'I': 0.200,
-	}
-
-CG_RADII= {
-'T': 0.191, # tiny bead
-'S': 0.230, # small bead
-'R': 0.264, # regular bead
-'U': 0.000, # Dummy bead, no radius
-'VS': 0.000,# Virtual site, no radius
-}
-
-def calc_SASA(ag, dir, mol_name, prefix, cg=False):
+def calc_SASA(ag, mol_name, prefix, cg=False, save=False):
 	'''
 	Calculate the solvent accessible surface area (SASA) of an MDAnalysis AtomGroup using MDTraj's shrake_rupley algorithm.
 	'''
@@ -92,7 +92,8 @@ def calc_SASA(ag, dir, mol_name, prefix, cg=False):
 			)
 			print(f"\nPhosphorus atoms use atomistic van der Waals radii from:\n{cite_string}\n")
 
-	np.savetxt("{dir}/{prefix}{name}_{inter_type}.dat".format(dir=dir,
+	if save:
+		np.savetxt("{dir}/{prefix}{name}_{inter_type}.dat".format(dir=save,
 	                                                	name=mol_name,
 														inter_type='sasa',
 														prefix=prefix),
@@ -100,9 +101,10 @@ def calc_SASA(ag, dir, mol_name, prefix, cg=False):
 	probs, edges = np.histogram(sasa, density=True, bins=INTERACTIONS['sasa'].get('bins'))
 	center_points = edges[:-1] + np.diff(edges)/2.
 	distr = np.transpose((center_points, probs))
-	np.savetxt("{dir}/{prefix}{name}_{inter_type}_distr.dat".format(dir=dir,
-																name=mol_name,
-																inter_type='sasa',
-																prefix=prefix),
-				distr)
-	return 
+	if save:
+		np.savetxt("{dir}/{prefix}{name}_{inter_type}_distr.dat".format(dir=save,
+																	name=mol_name,
+																	inter_type='sasa',
+																	prefix=prefix),
+					distr)
+	return distr

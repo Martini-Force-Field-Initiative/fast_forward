@@ -111,7 +111,7 @@ def main():
         for mol_name in init_universe.mol_names:
             print(f"INFO - Calculating SASA for {mol_name}")
             mol_atoms = init_universe.select_atoms(f"moltype {mol_name}")
-            calc_SASA(mol_atoms, args.sasa, mol_name, f"{args.prefix}", cg=False)
+            _ = calc_SASA(mol_atoms, mol_name, f"{args.prefix}", cg=False, save=args.sasa)
 
     print("INFO - Loading mapping files")
     #determine if we have a single .mapping file or a directory of .map files
