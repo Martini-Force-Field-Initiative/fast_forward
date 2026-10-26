@@ -14,7 +14,7 @@ from fast_forward.interaction_distribution import interaction_distribution
 from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
-from fast_forward.sasa import calc_SASA
+from fast_forward.sasa import calc_SASA, check_mdtraj
 from fast_forward.score import hellinger, score_matrix, calc_score
 from collections import defaultdict
 
@@ -186,6 +186,8 @@ def _main():
                              "the pairwise distance assessment entirely.")
 
     args = parser.parse_args()
+    if args.sasa:
+        check_mdtraj()
 
     distribution_files = glob(f'{args.reference}/*distr.dat')
     # create file map

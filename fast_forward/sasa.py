@@ -1,5 +1,8 @@
 import numpy as np
-import mdtraj as md
+try:
+	import mdtraj as md
+except ImportError:
+	md = None
 from . import DATA_PATH
 import numpy as np
 from vermouth.data import COMMON_CITATIONS
@@ -27,6 +30,14 @@ CG_RADII= {
 'U': 0.000, # Dummy bead, no radius
 'VS': 0.000,# Virtual site, no radius
 }
+
+def check_mdtraj():
+	'''
+	Raise an ImportError if mdtraj, which is needed for SASA calculations, is not installed.
+	'''
+	if md is None:
+		raise ImportError("SASA calculations require mdtraj, which is not installed. "
+						  "Install it with `pip install mdtraj`.")
 
 def mda_to_mdtraj(ag, cg=False):
 	'''
@@ -73,6 +84,7 @@ def calc_SASA(ag, mol_name, prefix, cg=False, save=False):
 	'''
 	Calculate the solvent accessible surface area (SASA) of an MDAnalysis AtomGroup using MDTraj's shrake_rupley algorithm.
 	'''
+	check_mdtraj()
 	traj = mda_to_mdtraj(ag, cg=cg)
 	radii = CG_RADII if cg else AA_RADII
 	sasa = md.shrake_rupley(traj, probe_radius=0.191, n_sphere_points=4800, change_radii=radii, mode='residue')

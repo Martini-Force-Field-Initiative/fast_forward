@@ -28,7 +28,7 @@ from fast_forward.mapping import create_new_universe, forward_map_positions, for
 from fast_forward.universe_handler import UniverseHandler
 from fast_forward.map_file_parers import read_mapping
 from fast_forward.cgsmiles import cgsmiles_to_mapping, load_cgsmiles_library
-from fast_forward.sasa import calc_SASA
+from fast_forward.sasa import calc_SASA, check_mdtraj
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
@@ -86,6 +86,8 @@ def main():
     mapping_group.add_argument('-lib', dest='library', help='loads library files', default=None)
 
     args = parser.parse_args()
+    if args.sasa:
+        check_mdtraj()
  
     # to replace the cgsorder default string hack
     if not isinstance(args.cgsorder, bool):
