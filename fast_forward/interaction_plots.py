@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 from .interaction_distribution import INTERACTIONS
+from collections import defaultdict
 
 X_LABELS={'bonds': 'Distance [Å]',
           'angles': 'Angle [°]',
@@ -14,7 +15,7 @@ X_LABELS={'bonds': 'Distance [Å]',
           'distances': 'Distance [Å]',
           'sasa': 'SASA [nm²]'}
 
-def _plotter(data, title, inter_type, ax, y_lower_threshold: float = 0.01, show_legend: bool = True):
+def _plotter(data: dict, title: str, inter_type: str, ax, y_lower_threshold: float = 0.01, show_legend: bool = True):
     """
     Plot distribution curves.
     If a y_lower_threshold is bigger than 0, the plot will automatically zoom in on
@@ -49,7 +50,7 @@ def _plotter(data, title, inter_type, ax, y_lower_threshold: float = 0.01, show_
     ax.set_title(title)
     ax.set_xlabel(X_LABELS.get(inter_type, ''))
 
-def make_distribution_plot(plot_data, save_plot_data=None, axarr=None, name='distribution_plots'):
+def make_distribution_plot(plot_data: defaultdict, save_plot_data: bool = None, axarr: np.ndarray = None, name: str = 'distribution_plots'):
     '''
 
     Parameters
@@ -105,7 +106,7 @@ def make_distribution_plot(plot_data, save_plot_data=None, axarr=None, name='dis
 
     fig.savefig(f'{name}.png', bbox_inches='tight')
 
-def make_matrix_plot(matrix, atom_names, axarr=None, name='score_matrix'):
+def make_matrix_plot(matrix: np.ndarray, atom_names: list, axarr: np.ndarray = None, name: str= 'score_matrix'):
     '''
 
     Parameters
@@ -142,7 +143,7 @@ def make_matrix_plot(matrix, atom_names, axarr=None, name='score_matrix'):
 
     fig.savefig(f'{name}.png', bbox_inches='tight')
 
-def make_distances_distribution_plot(plot_data, atom_names, save_plot_data=False, axarr=None, name='distance_distribution_plots'):
+def make_distances_distribution_plot(plot_data: defaultdict, atom_names: list, save_plot_data: bool = False, axarr: np.ndarray = None, name: str = 'distance_distribution_plots'):
     '''
 
     Parameters

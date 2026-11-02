@@ -9,6 +9,7 @@ from vermouth.data import COMMON_CITATIONS
 from vermouth.citation_parser import citation_formatter, read_bib
 from collections import ChainMap
 from fast_forward.interaction_distribution import INTERACTIONS
+import MDAnalysis as mda
 
 AA_RADII = {
 	'H': 0.109,
@@ -39,7 +40,7 @@ def check_mdtraj():
 		raise ImportError("SASA calculations require mdtraj, which is not installed. "
 						  "Install it with `pip install mdtraj`.")
 
-def mda_to_mdtraj(ag, cg=False):
+def mda_to_mdtraj(ag: mda.AtomGroup, cg: bool = False):
 	'''
 	Convert an MDAnalysis AtomGroup to an MDTraj Trajectory.
 	'''
@@ -80,7 +81,7 @@ def mda_to_mdtraj(ag, cg=False):
 						 unitcell_lengths=np.array(lengths) if lengths else None,
 						 unitcell_angles=np.array(angles) if angles else None)
 
-def calc_SASA(ag, mol_name, prefix, cg=False, save=False, return_distr=False):
+def calc_SASA(ag: mda.AtomGroup, mol_name: str, prefix: str, cg: bool = False, save: bool = False, return_distr: bool = False):
 	'''
 	Calculate the solvent accessible surface area (SASA) of an MDAnalysis AtomGroup using MDTraj's shrake_rupley algorithm.
 	'''
