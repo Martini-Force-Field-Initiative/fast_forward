@@ -3,13 +3,15 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
 import vermouth.forcefield
 
 from fast_forward.itp_parser_sub import read_itp
+from fast_forward.score import calc_score, hellinger
 from fast_forward.tests.datafiles import (GSH_ASSESS_TRAJ, GSH_ASSESS_TPR, GSH_ITP_OUTPUT,
-                                          GSH_ASSESS_REFERENCE, HAVE_EXAMPLES_DATA,
-                                          MISSING_EXAMPLES_DATA_REASON)
+                                          GSH_ASSESS_REFERENCE, GSH_SASA_AA_DISTR, GSH_SASA_CG,
+                                          GSH_SASA_CG_DISTR, HAVE_EXAMPLES_DATA, MISSING_EXAMPLES_DATA_REASON)
 
 pytestmark = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
 
@@ -202,3 +204,108 @@ def test_ff_assess_interactions_only(tmp_path, monkeypatch):
     distances_report = tmp_path / 'report_distances.out'
     assert interactions_report.exists()
     assert not distances_report.exists()
+
+
+def _sasa_reference(tmp_path, with_sasa=True):
+    """
+    Copy the GSH assessment reference into tmp_path and, optionally, add the
+    stored atomistic SASA distribution produced by 'ff_map -sasa'.
+    """
+    reference = tmp_path / 'reference'
+    reference.mkdir()
+    for reference_file in Path(GSH_ASSESS_REFERENCE).glob('*.dat'):
+        shutil.copy(reference_file, reference / reference_file.name)
+
+    if with_sasa:
+        shutil.copy(GSH_SASA_AA_DISTR, reference)
+    return reference
+
+
+def test_ff_assess_sasa(tmp_path, monkeypatch):
+    """
+    '-sasa' scores the CG SASA distribution against the atomistic reference
+    and writes report_sasa.out; with '-dists' the CG SASA time series and
+    distribution are saved as well.
+    """
+    reference = _sasa_reference(tmp_path)
+    run_dir = tmp_path / 'run'
+    run_dir.mkdir()
+    monkeypatch.chdir(run_dir)
+    ff_assess = shutil.which('ff_assess')
+
+    command = [ff_assess, '-f', GSH_ASSESS_TRAJ, '-s', GSH_ASSESS_TPR,
+               '-i', GSH_ITP_OUTPUT, '-d', reference, '-interactions-only', '-sasa',
+               '-dists', 'dists']
+    (run_dir / 'dists').mkdir()
+
+    proc = subprocess.run(command, cwd='.', timeout=60, check=False,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+
+    exit_code = proc.returncode
+    if exit_code:
+        print(proc.stdout)
+        print(proc.stderr)
+    assert not exit_code
+
+    sasa_report = run_dir / 'report_sasa.out'
+    assert sasa_report.exists()
+
+    scores = {}
+    for line in sasa_report.read_text().splitlines():
+        match = SCORE_LINE.match(line)
+        if match:
+            name, h_score, score = match.groups()
+            scores[name] = (float(h_score), float(score))
+
+    # the CG time series and distribution match the stored GSH reference
+    sasa = np.loadtxt(run_dir / 'dists/GSH_sasa.dat')
+    assert np.allclose(sasa, np.loadtxt(GSH_SASA_CG))
+    distr = np.loadtxt(run_dir / 'dists/GSH_sasa_distr.dat')
+    reference_distr = np.loadtxt(GSH_SASA_CG_DISTR)
+    assert np.allclose(distr.T[0], reference_distr.T[0])
+    # compare cumulative distributions, so that a value sitting on a bin edge
+    # may move one frame (1/n_frames) into the neighbouring bin
+    assert np.allclose(np.cumsum(distr.T[1]) / distr.T[1].sum(),
+                       np.cumsum(reference_distr.T[1]) / reference_distr.T[1].sum(),
+                       rtol=0, atol=1.5 / len(sasa))
+
+    # the reported scores are those of the stored CG vs AA distributions
+    reference_probs = np.loadtxt(GSH_SASA_AA_DISTR).T[1]
+    reference_probs /= reference_probs.sum()
+    simulated_probs = np.loadtxt(GSH_SASA_CG_DISTR).T[1]
+    simulated_probs /= simulated_probs.sum()
+    expected_h_score = hellinger(simulated_probs, reference_probs)
+    expected_score = calc_score(reference_probs, simulated_probs, [0.7, 0.3], 'sasa')  # default -score-weight
+
+    assert set(scores) == {'GSH'}
+    h_score, score = scores['GSH']
+    assert h_score == pytest.approx(expected_h_score, abs=0.005)
+    assert score == pytest.approx(expected_score, abs=0.005)
+
+
+def test_ff_assess_sasa_missing_reference(tmp_path, monkeypatch):
+    """
+    '-sasa' without a '<molname>_sasa_distr.dat' reference must fail with a
+    clean error naming the missing file.
+    """
+    reference = _sasa_reference(tmp_path, with_sasa=False)
+    run_dir = tmp_path / 'run'
+    run_dir.mkdir()
+    monkeypatch.chdir(run_dir)
+    ff_assess = shutil.which('ff_assess')
+
+    command = [ff_assess, '-f', GSH_ASSESS_TRAJ, '-s', GSH_ASSESS_TPR,
+               '-i', GSH_ITP_OUTPUT, '-d', reference, '-interactions-only', '-sasa']
+
+    proc = subprocess.run(command, cwd='.', timeout=60, check=False,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+
+    assert proc.returncode != 0
+    assert 'Error:' in proc.stderr
+    assert 'GSH_sasa_distr.dat' in proc.stderr
+    assert 'Traceback' not in proc.stderr
+    assert not (run_dir / 'report_sasa.out').exists()

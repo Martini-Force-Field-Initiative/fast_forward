@@ -44,10 +44,11 @@ A small modification required is the header directive, which must be changed to 
 .. code-block::
 
     [ molecule ]
-    LIG GSH
+    GSH
 
-Here, the ``molecule`` directive indicate residue names in the topology file at atomistic resolution (``LIG``)
-and the name at CG resolution (``GSH``).
+Here, the ``molecule`` directive indicates the residue name in the topology file at atomistic resolution
+(``GSH``), which is also used at CG resolution. If the two names differ, give both, e.g. ``LIG GSH`` maps
+the atomistic residue ``LIG`` to the CG name ``GSH``.
 
 Mapping the molecule
 ====================
@@ -56,7 +57,7 @@ With the `.map` file prepared, we can map the system. The trajectory can be mapp
 
 .. code-block::
 
-    ff_map -f atomistic.xtc -s atomistic.tpr -m GSH.map -o mapped.xtc -mols LIG
+    ff_map -f atomistic.xtc -s atomistic.tpr -m GSH.map -o mapped.xtc -mols GSH
 
 
 Note that by mapping a trajectory, the first frame is written as a simple coordinate file (``.gro``) also
@@ -65,7 +66,7 @@ with the same file name prefix (in this case, it will be called ``mapped.gro``).
 .. admonition:: Use of the ``-mols`` flag
 
     The ``-mols`` flag here is the ``moleculename`` of the molecule as described in the topology. In this case,
-    the fact that the molecule consists of only one residue, also called ``LIG``, is a coincidence.
+    the fact that the molecule consists of only one residue, also called ``GSH``, is a coincidence.
 
 The mapped structure could now be viewed in vmd to check that everything is now in place:
 
