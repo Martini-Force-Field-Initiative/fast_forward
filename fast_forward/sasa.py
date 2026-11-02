@@ -80,7 +80,7 @@ def mda_to_mdtraj(ag, cg=False):
 						 unitcell_lengths=np.array(lengths) if lengths else None,
 						 unitcell_angles=np.array(angles) if angles else None)
 
-def calc_SASA(ag, mol_name, prefix, cg=False, save=False):
+def calc_SASA(ag, mol_name, prefix, cg=False, save=False, return_distr=False):
 	'''
 	Calculate the solvent accessible surface area (SASA) of an MDAnalysis AtomGroup using MDTraj's shrake_rupley algorithm.
 	'''
@@ -119,4 +119,5 @@ def calc_SASA(ag, mol_name, prefix, cg=False, save=False):
 																	inter_type='sasa',
 																	prefix=prefix),
 					distr)
-	return distr
+	if return_distr:
+		return distr

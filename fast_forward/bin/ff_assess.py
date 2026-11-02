@@ -308,7 +308,7 @@ def _main():
             for molname, _ in ff.blocks.items():
                 print(f"INFO - Calculating SASA for {molname}")
                 mol_atoms = u.select_atoms(f"moltype {molname}")
-                distr = calc_SASA(mol_atoms, molname, prefix =f"{args.prefix}", cg=True, save=args.distribution_data)
+                distr = calc_SASA(mol_atoms, molname, prefix =f"{args.prefix}", cg=True, save=args.distribution_data, return_distr=True)
 
                 probs = distr.T[1]
                 # read in reference distribution
