@@ -189,6 +189,9 @@ def _main():
     if args.sasa:
         check_mdtraj()
 
+    if args.plots is None and args.plot_data:
+        args.plots = "."
+        
     distribution_files = glob(f'{args.reference}/*distr.dat')
     # create file map
     file_map = {}
@@ -257,7 +260,7 @@ def _main():
                     if args.plot_data:
                         plot_data[inter_type][group_name] = {"x": reference_data.T[0],
                                                          "Reference": reference_data.T[1],
-                                                         'Simulated': probs}
+                                                         "Simulated": probs}
         if args.plots:
             make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/interaction_distributions_{molname}')
         
@@ -300,7 +303,7 @@ def _main():
                     report_distances(score_m, molname, atom_names)
 
         if args.sasa:
-            if args.plot_data:
+            if args.plots:
                 plot_data = defaultdict(dict) # initialize only if needed
             h_score_dict = {}
             score_dict = {}
@@ -334,7 +337,7 @@ def _main():
                     print(f"Saving SASA distribution data for {molname} to plot_data dictionary.")
                     plot_data['sasa'][molname] = {"x": reference_data.T[0],
                                                         "Reference": reference_data.T[1],
-                                                        'Simulated': probs}
+                                                        "Simulated": probs}
             if args.plots:
                 make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions')
                     
