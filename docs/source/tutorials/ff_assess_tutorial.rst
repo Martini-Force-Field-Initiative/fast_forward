@@ -138,6 +138,28 @@ The scoring matrix is also saved as a report:
     1_AMD2  0.25  0.29  0.39  0.25  0.00  0.18
     1_CAC2  0.27  0.34  0.33  0.26  0.18  0.00
 
+Solvent accessible surface area (SASA) assessment
+=================================================
+To ensure that the new model reproduces the correct molecular shape and volume, ``ff_assess`` can also generate
+distribution comparisons for the solvent accessible surface area (SASA). 
+It will compare the SASA of the molecule to the atomistic reference distribution generates with ``ff_map -sasa``.
+A distribution comparison figure is generated, comparing the reference SASA to the newly simulated one:
+.. figure::  ../figs/sasa_distributions_GSH.png
 
+The comparison is also saved as a report:
+.. code-block::
+	[ Solvent Accessible Surface Area (SASA) Report ]
+	Overall Score : 0.58 ± 0.0
+
+	Interaction Scores:
+	0 - identical, 1 - no overlap
+
+	Score guide:
+	0.0-0.3 : good
+	0.3-0.5 : ok
+	0.5-1.0 : bad
+
+					Hellinger distance (Scoring function)
+			GSH                 : 0.53 (0.58)
 
 

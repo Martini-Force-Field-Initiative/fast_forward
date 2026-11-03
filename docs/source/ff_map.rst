@@ -23,6 +23,8 @@ Options
                             any number of cgsmiles strings. (default: None)
       -m MAP_FILE           .mapping file or path to directory of .map files (default: )
       -o OUTPATH            name of the mapped trajectory (XTC/GRO). If trajectory, first frame will also be written as a separate gro file (default: None)
+	  -sasa OUTPATH         calculate the solvent accessible surface area (SASA) of the system. Save text files with time series and distribution data.
+							Optionally provide a path (default: current dir). The path should be the same directory as you use with ff_inter -dists.
 
     Mapping Options:
       -mode MODE            COG or COM mapping (default: COG)
@@ -155,6 +157,16 @@ where a CHARMM36m POPC was stripped of all hydrogen and mapped with reconstructi
 Note the reconstruction only affects the mapping, atomistic coordinates with
 hydrogen are not written out.
 
+Solvent Accessible Surface Area (SASA)
+================================
+
+The solvent accessible surface area (SASA) is a measure of the molecular shape and volume.
+
+In fast_forward, the SASA can be calculated for each residue in the system using the Shrake-Rupley algorithm. 
+This algorithm calculates the SASA by rolling a probe sphere (representing a water molecule) over the molecular surface and counting the area that is covered.
+
+The SASA calculation can be enabled by using the `-sasa` option. 
+This will generate text files with time series and distribution data for each residue.
 
 Mapping using CGSmiles
 ======================

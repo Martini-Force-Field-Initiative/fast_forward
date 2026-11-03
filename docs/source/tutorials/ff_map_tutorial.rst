@@ -78,6 +78,11 @@ contains the mapped first frame and trajectory.
 From here, the mapped trajectory can be used in the ``ff_inter`` subprogram to generate
 initial parameters for the molecule.
 
+Calculating the solvent accessible surface area (SASA)
+======================================================
+
+Additionally, the solvent accessible surface area (SASA) can be calculated for each molecule in the system using the `-sasa` option. 
+This will generate text files with time series and distribution data for each residue, which can be used for for comparison with the CG trajectory using ``ff_assess``.
 
 
 
