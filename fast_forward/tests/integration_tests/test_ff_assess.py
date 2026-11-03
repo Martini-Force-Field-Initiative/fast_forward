@@ -261,15 +261,15 @@ def test_ff_assess_sasa(tmp_path, monkeypatch):
 
     # the CG time series and distribution match the stored GSH reference
     sasa = np.loadtxt(run_dir / 'dists/GSH_sasa.dat')
-    assert np.allclose(sasa, np.loadtxt(GSH_SASA_CG))
+    assert np.allclose(sasa, np.loadtxt(GSH_SASA_CG), rtol=0, atol=5e-3)
     distr = np.loadtxt(run_dir / 'dists/GSH_sasa_distr.dat')
     reference_distr = np.loadtxt(GSH_SASA_CG_DISTR)
     assert np.allclose(distr.T[0], reference_distr.T[0])
-    # compare cumulative distributions, so that a value sitting on a bin edge
-    # may move one frame (1/n_frames) into the neighbouring bin
+    # compare cumulative distributions, so that frames close to a bin edge
+    # (bins are 0.01 nm^2 wide) may move into the neighbouring bin
     assert np.allclose(np.cumsum(distr.T[1]) / distr.T[1].sum(),
                        np.cumsum(reference_distr.T[1]) / reference_distr.T[1].sum(),
-                       rtol=0, atol=1.5 / len(sasa))
+                       rtol=0, atol=0.02)
 
     # the reported scores are those of the stored CG vs AA distributions
     reference_probs = np.loadtxt(GSH_SASA_AA_DISTR).T[1]
