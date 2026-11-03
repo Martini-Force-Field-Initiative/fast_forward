@@ -257,7 +257,7 @@ def _main():
                         [args.hellinger_weight, 1-args.hellinger_weight], inter_type
                         )
                     score_dict[inter_type][group_name] = score
-                    if args.plot_data:
+                    if args.plots:
                         plot_data[inter_type][group_name] = {"x": reference_data.T[0],
                                                          "Reference": reference_data.T[1],
                                                          "Simulated": probs}
@@ -297,7 +297,7 @@ def _main():
                     if args.plots:
                         make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
                         make_distances_distribution_plot(
-                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
+                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=args.plot_data
                         )
 
                     report_distances(score_m, molname, atom_names)
@@ -333,7 +333,7 @@ def _main():
                     [args.hellinger_weight, 1-args.hellinger_weight], 'sasa'
                     )
                
-                if args.plot_data:
+                if args.plots:
                     print(f"Saving SASA distribution data for {molname} to plot_data dictionary.")
                     plot_data['sasa'][molname] = {"x": reference_data.T[0],
                                                         "Reference": reference_data.T[1],
