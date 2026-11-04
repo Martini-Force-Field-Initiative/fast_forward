@@ -14,7 +14,9 @@ from fast_forward.interaction_distribution import interaction_distribution
 from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
+from vermouth.file_writer import DeferredFileWriter
 from fast_forward.sasa import calc_SASA, check_mdtraj
+from fast_forward.sasa_surface import write_cg_sasa_surface
 from fast_forward.score import hellinger, score_matrix, calc_score
 from collections import defaultdict
 
@@ -181,11 +183,20 @@ def _main():
     parser.add_argument('-sasa', default=None, const=".", nargs="?",
                         dest="sasa",
                         help="Calculate the solvent accessible surface area (SASA) of the system.")
+    parser.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
+                        help="With -sasa: write the CG frame closest to the mapped structure from "
+                             "'ff_map -sasa-surface' (<mol>_sasa_mapped.pdb in the -d directory), superposed onto "
+                             "it, together with its surface dots as <mol>_sasa_dots_CG.pdb. Files go to the -dists "
+                             "path.")
+    parser.add_argument('-sasa-ndots', default=240, type=int, dest='sasa_ndots',
+                        help="Minimum number of surface dots per bead for -sasa-surface.")
     parser.add_argument('-interactions-only', default=False, action='store_true', dest='interactions_only',
                         help="Only assess bonded interaction distributions (bonds, angles, dihedrals); skip "
                              "the pairwise distance assessment entirely.")
 
     args = parser.parse_args()
+    if args.sasa_surface and not args.sasa:
+        parser.error("-sasa-surface requires -sasa")
     if args.sasa:
         check_mdtraj()
 
@@ -311,7 +322,7 @@ def _main():
             for molname, _ in ff.blocks.items():
                 print(f"INFO - Calculating SASA for {molname}")
                 mol_atoms = u.select_atoms(f"moltype {molname}")
-                distr = calc_SASA(mol_atoms, molname, prefix =f"{args.prefix}", cg=True, save=args.distribution_data, return_distr=True)
+                sasa, distr = calc_SASA(mol_atoms, molname, prefix=f"{args.prefix}", cg=True, save=args.distribution_data)
 
                 probs = distr.T[1]
                 # read in reference distribution
@@ -332,6 +343,10 @@ def _main():
                     reference_data.T[1]/ reference_data.T[1].sum(), probs/probs.sum(), 
                     [args.hellinger_weight, 1-args.hellinger_weight], 'sasa'
                     )
+                if args.sasa_surface:
+                    write_cg_sasa_surface(mol_atoms, molname, reference=args.reference,
+                                          outdir=args.distribution_data or ".",
+                                          prefix=args.prefix, ndots=args.sasa_ndots, sasa=sasa)
                
                 if args.plots:
                     print(f"Saving SASA distribution data for {molname} to plot_data dictionary.")
@@ -342,6 +357,9 @@ def _main():
                 make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions')
                     
             report_sasa(h_score_dict, score_dict)
+
+    # move the files opened with deferred_open (SASA surface PDBs) to their final names
+    DeferredFileWriter().write()
             
 def main():
     try:

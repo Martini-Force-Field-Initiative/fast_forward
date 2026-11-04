@@ -24,11 +24,13 @@ import numpy as np
 import numba
 import MDAnalysis as mda
 import fast_forward
+from vermouth.file_writer import DeferredFileWriter
 from fast_forward.mapping import create_new_universe, forward_map_positions, forward_map_indices
 from fast_forward.universe_handler import UniverseHandler
 from fast_forward.map_file_parers import read_mapping
 from fast_forward.cgsmiles import cgsmiles_to_mapping, load_cgsmiles_library
-from fast_forward.sasa import calc_SASA, check_mdtraj
+from fast_forward.sasa import calc_SASA, check_mdtraj, sasa_citation_remarks
+from fast_forward.sasa_surface import write_aa_sasa_surface, write_structure_pdb
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
@@ -59,11 +61,7 @@ def main():
     file_group.add_argument('-o', dest='outpath', type=str, required=True,
                             help='name of the mapped trajectory (XTC/GRO). If trajectory, first frame will also be '
                                  'written as a separate gro file')
-    file_group.add_argument('-sasa', default=None, const=".", nargs="?",
-							dest="sasa",
-							help="Calculate the solvent accessible surface area (SASA) of the system. Save text files with time series and distribution data. " \
-							"Optionally provide a path (default: current dir). The path should be the same directory as you use with ff_inter -dists.")
-	
+    
     mapping_group = parser.add_argument_group('Mapping Options')
     mapping_group.add_argument('-mode', dest='mode', required=False, type=str,
                                help='COG or COM mapping', default='COG')
@@ -85,7 +83,22 @@ def main():
     mapping_group.set_defaults(cgsorder='assume yes if passed only with -cgs and no if -cgsl is used')
     mapping_group.add_argument('-lib', dest='library', help='loads library files', default=None)
 
+    sasa_group = parser.add_argument_group('SASA Options')
+    sasa_group.add_argument('-sasa', default=None, const=".", nargs="?",
+							dest="sasa",
+							help="Calculate the solvent accessible surface area (SASA) of the system. Save text files with time series and distribution data. " \
+							"Optionally provide a path (default: current dir). The path should be the same directory as you use with ff_inter -dists.")
+    sasa_group.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
+                            help="With -sasa: for the frame whose SASA is closest to the median, write the atomistic "
+                                 "structure with its surface dots (<mol>_sasa_dots_AA.pdb) and the mapped CG structure "
+                                 "of the same frame (<mol>_sasa_mapped.pdb) to the -sasa path. "
+                                 "ff_assess -sasa-surface uses the mapped structure to pick a matching CG frame.")
+    sasa_group.add_argument('-sasa-ndots', default=240, type=int, dest='sasa_ndots',
+                            help="Minimum number of surface dots per atom for -sasa-surface.")
+    
     args = parser.parse_args()
+    if args.sasa_surface and not args.sasa:
+        parser.error("-sasa-surface requires -sasa")
     if args.sasa:
         check_mdtraj()
  
@@ -109,11 +122,16 @@ def main():
     else:
         treated_atoms = np.array([])
 
+    surface_frames = {} # molecule name: (frame, atom indices) of the structure written with -sasa-surface
     if args.sasa:
         for mol_name in init_universe.mol_names:
             print(f"INFO - Calculating SASA for {mol_name}")
             mol_atoms = init_universe.select_atoms(f"moltype {mol_name}")
-            calc_SASA(mol_atoms, mol_name, f"{args.prefix}", cg=False, save=args.sasa, return_distr=False)
+            sasa, _ = calc_SASA(mol_atoms, mol_name, f"{args.prefix}", cg=False, save=args.sasa)
+            if args.sasa_surface:
+                surface_frames[mol_name] = write_aa_sasa_surface(mol_atoms, mol_name, outdir=args.sasa,
+                                                                 prefix=args.prefix, ndots=args.sasa_ndots,
+                                                                 sasa=sasa)
 
     print("INFO - Loading mapping files")
     #determine if we have a single .mapping file or a directory of .map files
@@ -185,6 +203,17 @@ def main():
                                       mappings,
                                       n_residues=None,
                                       res_iter=res_iter)
+
+	# write the mapped structure of the frame used for the SASA surface if requested
+    for mol_name, (frame, atom_idxs) in surface_frames.items():
+        # beads built only from atoms of the molecule whose surface was written
+        bead_idxs_mol = [bdx for bdx, atoms in enumerate(mapped_atoms)
+                         if len(atoms) and set(atoms) <= atom_idxs]
+        outname = pathlib.Path(args.sasa) / f"{args.prefix}{mol_name}_sasa_mapped.pdb"
+        print(f"INFO - Writing mapped structure of frame {frame} for {mol_name} to {outname}")
+        write_structure_pdb(cg_universe.atoms[bead_idxs_mol],
+                            mapped_trajectory[frame, bead_idxs_mol], outname,
+                            remarks=sasa_citation_remarks())
     # write coordinate
     print("INFO - Writing CG trajectory")
     # these are all the multiframe writes MDAnalysis has
@@ -215,5 +244,9 @@ def main():
                     first_frame.box = init_universe.dimensions if isinstance(init_universe.dimensions, np.ndarray) else np.array([7.0, 7.0, 7.0])
                     first_frame.write(cg_beads) 
 
+    # write SASA files if requested
+    if args.sasa_surface:
+	    DeferredFileWriter().write()
+    
 if __name__ == '__main__':
     main()
