@@ -11,11 +11,11 @@ REMARK     285 PROTEIN DATA BANK CONVENTIONS REQUIRE THAT
 REMARK     285 CRYST1 RECORD IS INCLUDED, BUT THE VALUES ON
 REMARK     285 THIS RECORD ARE MEANINGLESS.
 MODEL        1
-ATOM      1 CAC1 GSH A   0      36.543  40.047  21.110  1.00  0.00              
-ATOM      2 AMC1 GSH A   0      34.725  39.454  19.131  1.00  0.00              
-ATOM      3 AMD1 GSH A   0      36.270  37.763  16.125  1.00  0.00              
-ATOM      4 SUL1 GSH A   0      38.236  39.474  14.720  1.00  0.00              
-ATOM      5 AMD2 GSH A   0      38.633  35.494  15.083  1.00  0.00              
-ATOM      6 CAC2 GSH A   0      39.390  32.950  16.273  1.00  0.00              
+ATOM      1 CAC1 GSH A   0      36.110  39.003  21.467  1.00  0.00              
+ATOM      2 AMC1 GSH A   0      35.148  39.818  19.246  1.00  0.00              
+ATOM      3 AMD1 GSH A   0      36.078  37.788  15.997  1.00  0.00              
+ATOM      4 SUL1 GSH A   0      37.042  39.348  14.236  1.00  0.00              
+ATOM      5 AMD2 GSH A   0      38.767  35.571  15.021  1.00  0.00              
+ATOM      6 CAC2 GSH A   0      39.653  33.460  16.740  1.00  0.00              
 ENDMDL
 END
