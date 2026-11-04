@@ -23,6 +23,14 @@ Options
                             any number of cgsmiles strings. (default: None)
       -m MAP_FILE           .mapping file or path to directory of .map files (default: )
       -o OUTPATH            name of the mapped trajectory (XTC/GRO). If trajectory, first frame will also be written as a separate gro file (default: None)
+      -sasa                 Calculate the solvent accessible surface area (SASA) of the atomistic trajectory. Save text files with time
+                            series and distribution data. Optionally provide a path (default: current dir). The path
+                            should be the same directory as you use with ff_inter -dists. (default: None)
+      -sasa-surface         With -sasa: for the frame whose SASA is closest to the median, write the atomistic structure
+                            with its surface dots (<mol>_sasa_dots_AA.pdb) and the mapped CG structure of the same
+                            frame (<mol>_sasa_mapped.pdb) to the -sasa path. (default: False)
+      -sasa-ndots SASA_NDOTS
+                            Minimum number of surface dots per atom for -sasa-surface. (default: 240)
 
     Mapping Options:
       -mode MODE            COG or COM mapping (default: COG)
@@ -155,6 +163,49 @@ where a CHARMM36m POPC was stripped of all hydrogen and mapped with reconstructi
 Note the reconstruction only affects the mapping, atomistic coordinates with
 hydrogen are not written out.
 
+Solvent Accessible Surface Area (SASA)
+======================================
+
+The solvent accessible surface area (SASA) is a measure of the molecular shape and volume.
+
+In fast_forward, the SASA is calculated as in ``gmx sasa`` (Shrake-Rupley algorithm): test points (dots) are
+placed on a sphere around every atom, enlarged by the radius of a probe representing a water molecule (0.191 nm),
+and the dots that are not buried by neighbouring atoms are counted. The dots are distributed as in ``gmx sasa``
+(4842 dots per atom).
+
+The SASA calculation is enabled with the ``-sasa`` option.
+The SASA is calculated for every copy of a molecule on its own, so copies do not bury each other. As for the
+interaction distributions, the time series of all copies are concatenated (all frames of the first copy, then
+of the second, ...). For each molecule type, the time series (``<mol>_sasa.dat``) and its distribution
+(``<mol>_sasa_distr.dat``) are written; ``ff_assess -sasa`` treats the CG trajectory in the same way and uses the
+distribution as the reference. The SASA surfaces described below only use the first copy.
+
+.. _sasa-surfaces:
+
+SASA surfaces
+-------------
+
+With ``-sasa-surface`` the solvent accessible surface itself is written as a dot PDB file, for visual comparison
+of atomistic and coarse-grained models. Each file holds the structure the surface was computed for as ATOM
+records (chain A), followed by the surface dots as HETATM records (chain X). The dots are generated as in
+``gmx sasa -q`` (``-sasa-ndots`` sets the minimum number of dots per sphere) and lie on the probe-expanded spheres. All dots have the atom and residue name
+``DOT`` and carry the residue id of the particle they belong to. The files are written with MDAnalysis and carry the citations
+of fast_forward and the radii as REMARK records.
+
+``ff_map -sasa -sasa-surface`` selects the frame of the first molecule of each type whose SASA is closest to the
+median and writes the atomistic structure with its surface (``<mol>_sasa_dots_AA.pdb``) and the mapped structure
+of the same frame (``<mol>_sasa_mapped.pdb``).
+
+``ff_assess -sasa -sasa-surface -d <reference dir>`` reads ``<mol>_sasa_mapped.pdb``, picks the simulated CG
+frame with the lowest RMSD to it and superposes that frame onto the mapped structure. It writes the CG structure
+with its surface (``<mol>_sasa_dots_CG.pdb``). All files share the same coordinate frame and can be loaded
+together, e.g.:
+
+.. code-block::
+
+    vmd -m GSH_sasa_dots_AA.pdb GSH_sasa_mapped.pdb GSH_sasa_dots_CG.pdb
+
+Molecules are assumed to be whole; correct the trajectories for PBC beforehand (or use ``ff_map -pbc``).
 
 Mapping using CGSmiles
 ======================

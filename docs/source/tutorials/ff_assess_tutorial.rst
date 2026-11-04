@@ -138,6 +138,51 @@ The scoring matrix is also saved as a report:
     1_AMD2  0.25  0.29  0.39  0.25  0.00  0.18
     1_CAC2  0.27  0.34  0.33  0.26  0.18  0.00
 
+Solvent accessible surface area (SASA) assessment
+=================================================
+To ensure that the new model reproduces the correct molecular shape and volume, ``ff_assess`` can also generate
+distribution comparisons for the solvent accessible surface area (SASA). 
+It will compare the SASA of the molecule to the atomistic reference distribution generated with ``ff_map -sasa``
+(``GSH_sasa_distr.dat`` in the reference directory):
 
+.. code-block::
 
+    ff_assess -f simulated.xtc -s simulated.tpr -i ../first_simulation/GSH.itp -d ../mapping_and_interactions/ -plots -sasa -sasa-surface
 
+A distribution comparison figure is generated, comparing the reference SASA to the newly simulated one:
+
+.. figure::  ../figs/sasa_distributions_GSH.png
+
+The comparison is also saved as a report:
+
+.. code-block::
+
+	[ Solvent Accessible Surface Area (SASA) Report ]
+	Overall Score : 0.58 ± 0.0
+
+	Interaction Scores:
+	0 - identical, 1 - no overlap
+
+	Score guide:
+	0.0-0.3 : good
+	0.3-0.5 : ok
+	0.5-1.0 : bad
+
+					Hellinger distance (Scoring function)
+			GSH                 : 0.53 (0.58)
+
+Comparing the surfaces
+----------------------
+
+With ``-sasa-surface``, ``ff_assess`` reads the mapped structure ``GSH_sasa_mapped.pdb`` written by
+``ff_map -sasa-surface``, picks the frame of the CG simulation with the lowest RMSD to it and superposes that frame
+onto it. The CG structure and the dots of its solvent accessible surface are written to ``GSH_sasa_dots_CG.pdb``
+(in the ``-dists`` directory if provided). Since all structures share the same coordinate frame, the
+atomistic and CG surfaces can be overlaid directly:
+
+.. code-block::
+
+    vmd -m ../mapping_and_interactions/GSH_sasa_dots_AA.pdb ../mapping_and_interactions/GSH_sasa_mapped.pdb GSH_sasa_dots_CG.pdb
+
+Regions where the CG surface lies clearly inside or outside the atomistic one point to beads that are too small or
+too large, or  bond lengths that need refinement.

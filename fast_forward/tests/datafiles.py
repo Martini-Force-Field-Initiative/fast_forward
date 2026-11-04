@@ -32,4 +32,13 @@ GSH_ASSESS_TRAJ = EXAMPLES_DATA / 'assessment/simulated.xtc'
 GSH_ASSESS_TPR = EXAMPLES_DATA / 'assessment/simulated.tpr'
 GSH_ASSESS_REFERENCE = EXAMPLES_DATA / 'assessment/reference'
 
+# SASA time series and distributions: AA from 'ff_map -sasa' on the atomistic
+# trajectory, CG from 'ff_assess -sasa -dists' on the assessment trajectory
+GSH_SASA_AA = EXAMPLES_DATA / 'SASA/AA/GSH_sasa.dat'
+GSH_SASA_AA_DISTR = EXAMPLES_DATA / 'SASA/AA/GSH_sasa_distr.dat'
+# mapped structure of the representative AA frame from 'ff_map -sasa -sasa-surface'
+GSH_SASA_MAPPED = EXAMPLES_DATA / 'SASA/AA/GSH_sasa_mapped.pdb'
+GSH_SASA_CG = EXAMPLES_DATA / 'SASA/CG/GSH_sasa.dat'
+GSH_SASA_CG_DISTR = EXAMPLES_DATA / 'SASA/CG/GSH_sasa_distr.dat'
+
 del Path

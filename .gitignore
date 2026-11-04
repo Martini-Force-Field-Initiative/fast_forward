@@ -29,4 +29,5 @@ docs/source/.doctrees
 **/*.lock
 **/*.npz
 
+settings.json
 

@@ -93,6 +93,9 @@ def main():
 
     args = parser.parse_args()
 
+    if args.plots is None and args.plot_data:
+        args.plots = "."
+    
     # load trajectory
     if args.tprfile:
         u = mda.Universe(args.tprfile, args.trajfile, in_memory=True)

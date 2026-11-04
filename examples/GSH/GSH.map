@@ -1,5 +1,5 @@
 [ molecule ]
-LIG GSH
+GSH
 
 [ martini ]
 CAC1 AMC1 AMD1 SUL1 AMD2 CAC2 

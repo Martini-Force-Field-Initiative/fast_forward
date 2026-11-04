@@ -44,10 +44,11 @@ A small modification required is the header directive, which must be changed to 
 .. code-block::
 
     [ molecule ]
-    LIG GSH
+    GSH
 
-Here, the ``molecule`` directive indicate residue names in the topology file at atomistic resolution (``LIG``)
-and the name at CG resolution (``GSH``).
+Here, the ``molecule`` directive indicates the residue name in the topology file at atomistic resolution
+(``GSH``), which is also used at CG resolution. If the two names differ, give both, e.g. ``LIG GSH`` maps
+the atomistic residue ``LIG`` to the CG name ``GSH``.
 
 Mapping the molecule
 ====================
@@ -56,7 +57,7 @@ With the `.map` file prepared, we can map the system. The trajectory can be mapp
 
 .. code-block::
 
-    ff_map -f atomistic.xtc -s atomistic.tpr -m GSH.map -o mapped.xtc -mols LIG
+    ff_map -f atomistic.xtc -s atomistic.tpr -m GSH.map -o mapped.xtc -mols GSH
 
 
 Note that by mapping a trajectory, the first frame is written as a simple coordinate file (``.gro``) also
@@ -65,7 +66,7 @@ with the same file name prefix (in this case, it will be called ``mapped.gro``).
 .. admonition:: Use of the ``-mols`` flag
 
     The ``-mols`` flag here is the ``moleculename`` of the molecule as described in the topology. In this case,
-    the fact that the molecule consists of only one residue, also called ``LIG``, is a coincidence.
+    the fact that the molecule consists of only one residue, also called ``GSH``, is a coincidence.
 
 The mapped structure could now be viewed in vmd to check that everything is now in place:
 
@@ -77,6 +78,29 @@ contains the mapped first frame and trajectory.
 From here, the mapped trajectory can be used in the ``ff_inter`` subprogram to generate
 initial parameters for the molecule.
 
+Calculating the solvent accessible surface area (SASA)
+======================================================
+
+Additionally, the solvent accessible surface area (SASA) can be calculated for each molecule in the system using the
+``-sasa`` option. Pass the directory you also use for the ``ff_inter`` reference distributions,
+so that ``ff_assess`` finds everything in one place:
+
+.. code-block::
+
+    ff_map -f atomistic.xtc -s atomistic.tpr -m GSH.map -o mapped.xtc -mols GSH -sasa mapping_and_interactions -sasa-surface
+
+This writes the SASA of GSH in every frame (``GSH_sasa.dat``) and its distribution (``GSH_sasa_distr.dat``),
+which ``ff_assess`` uses as the reference for the CG model. With several copies of a molecule, the SASA of each
+copy is calculated on its own.
+
+With ``-sasa-surface``, ``ff_map`` additionally picks the frame whose SASA is closest to the median and writes
+
+* ``GSH_sasa_dots_AA.pdb``: the atomistic structure (ATOM records) together with the dots of its solvent accessible
+  surface (HETATM records, atom and residue name ``DOT``), and
+* ``GSH_sasa_mapped.pdb``: the mapped CG structure of the same frame, which ``ff_assess -sasa-surface`` uses to pick
+  a matching CG structure.
+
+The surface can be viewed in VMD by showing ``resname DOT`` as points, e.g. with the Lines drawing method.
 
 
 
