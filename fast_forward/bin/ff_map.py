@@ -29,7 +29,7 @@ from fast_forward.mapping import create_new_universe, forward_map_positions, for
 from fast_forward.universe_handler import UniverseHandler
 from fast_forward.map_file_parers import read_mapping
 from fast_forward.cgsmiles import cgsmiles_to_mapping, load_cgsmiles_library
-from fast_forward.sasa import calc_SASA, check_mdtraj, sasa_citation_remarks
+from fast_forward.sasa import calc_SASA, sasa_citation_remarks
 from fast_forward.sasa_surface import write_aa_sasa_surface, write_structure_pdb
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
@@ -99,8 +99,6 @@ def main():
     args = parser.parse_args()
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
-    if args.sasa:
-        check_mdtraj()
  
     # to replace the cgsorder default string hack
     if not isinstance(args.cgsorder, bool):

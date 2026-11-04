@@ -15,7 +15,7 @@ from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
 from vermouth.file_writer import DeferredFileWriter
-from fast_forward.sasa import calc_SASA, check_mdtraj
+from fast_forward.sasa import calc_SASA
 from fast_forward.sasa_surface import write_cg_sasa_surface
 from fast_forward.score import hellinger, score_matrix, calc_score
 from collections import defaultdict
@@ -197,8 +197,6 @@ def _main():
     args = parser.parse_args()
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
-    if args.sasa:
-        check_mdtraj()
 
     if args.plots is None and args.plot_data:
         args.plots = "."

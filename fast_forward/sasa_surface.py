@@ -1,10 +1,7 @@
 """
 Dot representation of the solvent accessible surface, for visual comparison of
 atomistic, mapped and coarse-grained structures.
-
-The unit-sphere dots are generated as in ``gmx sasa``.
 """
-from functools import lru_cache
 from pathlib import Path
 import warnings
 import numpy as np
@@ -12,169 +9,7 @@ import MDAnalysis as mda
 from MDAnalysis.lib.util import NamedStream
 from MDAnalysis.analysis.align import rotation_matrix
 from vermouth.file_writer import deferred_open
-from scipy.spatial import cKDTree
-from fast_forward.sasa import (PROBE_RADIUS, atom_radii, sasa_citation_remarks, sasa_per_molecule,
-                               split_molecules)
-
-def _divarc(p1, p2, div1, div2):
-    """Point at fraction div1/div2 along the great-circle arc p1 -> p2 (gmx divarc)."""
-    axis = np.cross(p1, p2)
-    phi = np.arctan2(np.linalg.norm(axis), np.dot(p1, p2)) * div1 / div2
-    axis /= np.linalg.norm(axis)
-    p1 = p1 / np.linalg.norm(p1)
-    return np.cos(phi) * p1 + np.sin(phi) * np.cross(axis, p1)
-
-def _icosahedron():
-    c72 = np.cos(np.radians(72.0))
-    rh = np.sqrt(1.0 - 2.0 * c72) / (1.0 - c72)
-    rg = c72 / (1.0 - c72)
-    v = [[0, 0, 1]]
-    v += [[rh * np.cos(np.radians(a)), rh * np.sin(np.radians(a)), rg] for a in (72, 144, 216, 288, 0)]
-    v += [[rh * np.cos(np.radians(a)), rh * np.sin(np.radians(a)), -rg] for a in (36, 108, 180, 252, 324)]
-    v += [[0, 0, -1]]
-    return np.array(v, float)
-
-def _fill_face(vi, vj, vk, tess):
-    """Interior dots of the spherical triangle (vi, vj, vk) at tessellation level tess."""
-    out = []
-    for tl in range(1, tess - 1):
-        pji = _divarc(vj, vi, tl, tess)
-        pki = _divarc(vk, vi, tl, tess)
-        for tl2 in range(1, tess - tl):
-            pij = _divarc(vi, vj, tl2, tess)
-            pkj = _divarc(vk, vj, tl2, tess)
-            pik = _divarc(vi, vk, tess - tl - tl2, tess)
-            pjk = _divarc(vj, vk, tess - tl - tl2, tess)
-            p = (_divarc(pki, pji, tl2, tess - tl)
-                 + _divarc(pkj, pij, tl, tess - tl2)
-                 + _divarc(pjk, pik, tl, tl + tl2))
-            out.append(p / np.linalg.norm(p))
-    return out
-
-def _d2(a, b):
-    return np.sum((a - b) ** 2)
-
-def ico_dot_arc(densit):
-    """Geodesic icosahedron: 10*tess^2 + 2 dots."""
-    tess = max(int(np.ceil(np.sqrt((densit - 2.0) / 10.0))), 1)
-    v = _icosahedron()
-    pts = list(v)
-    if tess > 1:
-        a = _d2(v[0], v[1])                       # squared icosahedron edge
-        e = lambda i, j: abs(_d2(v[i], v[j]) - a) < 1e-4
-        for i in range(11):                       # 30 edges
-            for j in range(i + 1, 12):
-                if e(i, j):
-                    pts += [_divarc(v[i], v[j], tl, tess) for tl in range(1, tess)]
-        for i in range(10):                       # 20 faces
-            for j in range(i + 1, 11):
-                for k in range(j + 1, 12):
-                    if e(i, j) and e(i, k) and e(j, k):
-                        pts += _fill_face(v[i], v[j], v[k], tess)
-    return np.array(pts)
-
-def ico_dot_dod(densit):
-    """Geodesic pentakis-dodecahedron: 30*tess^2 + 2 dots."""
-    tess = max(int(np.ceil(np.sqrt((densit - 2.0) / 30.0))), 1)
-    v = _icosahedron()
-    a = _d2(v[0], v[1])
-    e = lambda i, j: abs(_d2(v[i], v[j]) - a) < 1e-4
-    cen = []                                      # 20 face centres = dodecahedron vertices
-    for i in range(10):
-        for j in range(i + 1, 11):
-            for k in range(j + 1, 12):
-                if e(i, j) and e(i, k) and e(j, k):
-                    c = v[i] + v[j] + v[k]
-                    cen.append(c / np.linalg.norm(c))
-    w = np.vstack([v, cen])                       # 32 vertices
-    pts = list(w)
-    if tess > 1:
-        ai_d = min(_d2(w[0], w[j]) for j in range(12, 32))   # ico vertex - face centre
-        adod = min(_d2(w[12], w[j]) for j in range(13, 32))  # dodecahedron edge
-        def is_e(i, j):
-            if i < 12 and j < 12:
-                return False
-            return abs(_d2(w[i], w[j]) - (ai_d if (i < 12) != (j < 12) else adod)) < 1e-4
-        for i in range(31):                       # 90 edges
-            for j in range(max(12, i + 1), 32):
-                if is_e(i, j):
-                    pts += [_divarc(w[i], w[j], tl, tess) for tl in range(1, tess)]
-        for i in range(12):                       # 60 faces (vertex, centre, centre)
-            for j in range(12, 31):
-                for k in range(j + 1, 32):
-                    if is_e(i, j) and is_e(i, k) and is_e(j, k):
-                        pts += _fill_face(w[i], w[j], w[k], tess)
-    return np.array(pts)
-
-@lru_cache(maxsize=None)
-def gmx_unit_dots(ndots):
-    """
-    Dots as gmx sasa -ndots: whichever scheme gives fewer dots >= ndots
-    (e.g. 24 -> 32 (dod), 50 -> 92 (arc), 100 -> 122 (dod), 240 -> 252 (arc)).
-    The array is cached and read-only.
-    """
-    arc, dod = ico_dot_arc(ndots), ico_dot_dod(ndots)
-    unit = arc if len(arc) <= len(dod) else dod
-    unit.flags.writeable = False
-    return unit
-
-def surface_dots(xyz, radii, probe=0.191, ndots=240):
-    """
-    Generate dots of the solvent accessible surface of a set of spheres.
-
-    Parameters
-    ----------
-    xyz : np.ndarray
-        (n_atoms, 3) coordinates in nm.
-    radii : np.ndarray
-        (n_atoms,) van der Waals radii in nm. Particles with radius 0 (dummy
-        beads, virtual sites) neither carry dots nor bury dots of others.
-    probe : float
-        probe radius in nm
-    ndots : int
-        minimum number of dots per sphere
-
-    Returns
-    -------
-    dots : np.ndarray
-        (n_dots, 3) dot positions in nm
-    owners : np.ndarray
-        (n_dots,) index of the particle each dot belongs to
-    area : float
-        solvent accessible surface area in nm^2 estimated from the dots
-    """
-    xyz = np.asarray(xyz, dtype=float)
-    radii = np.asarray(radii, dtype=float)
-    unit = gmx_unit_dots(int(ndots))
-    n_pts = len(unit)
-
-    active = np.flatnonzero(radii > 0)
-    if active.size == 0:
-        return np.zeros((0, 3)), np.zeros(0, int), 0.0
-    ext = radii[active] + probe
-    centres = xyz[active]
-    # all candidate dots on the probe-expanded spheres
-    pts = (centres[:, None, :] + ext[:, None, None] * unit[None]).reshape(-1, 3)
-    owner_local = np.repeat(np.arange(active.size), n_pts)
-
-    # a dot is buried if it lies strictly inside the expanded sphere of another particle
-    keep = np.ones(len(pts), bool)
-    tree = cKDTree(pts)
-    for j, hits in enumerate(tree.query_ball_point(centres, ext)):
-        if not hits:
-            continue
-        hits = np.asarray(hits)
-        hits = hits[owner_local[hits] != j]
-        if hits.size:
-            d = np.linalg.norm(pts[hits] - centres[j], axis=1)
-            keep[hits[d < ext[j]]] = False
-
-    keep = keep.reshape(active.size, n_pts)
-    area = float(np.sum(keep.sum(axis=1) / n_pts * 4 * np.pi * ext**2))
-
-    dots = pts.reshape(active.size, n_pts, 3)[keep]
-    owners = active[np.nonzero(keep)[0]]
-    return dots, owners, area
+from fast_forward.sasa import PROBE_RADIUS, atom_radii, sasa_citation_remarks, split_molecules, surface_dots
 
 def _write_pdb(fname, positions, names, resnames, resids, chains, record_types, remarks):
     """
@@ -277,18 +112,7 @@ def write_sasa_surface(ag, positions, fname, cg=False, ndots=240):
                        + sasa_citation_remarks(ag, cg=cg))
     return area
 
-def _first_molecule_sasa(molecule, sasa, cg):
-    """
-    SASA of ``molecule``, the first molecule of a selection, in every frame.
-    ``sasa`` is the concatenated SASA series of that selection from ``calc_SASA``,
-    whose first n_frames values belong to the first molecule; without it the
-    SASA is computed.
-    """
-    if sasa is not None:
-        return sasa[:molecule.universe.trajectory.n_frames]
-    return sasa_per_molecule(molecule, cg=cg)[0]
-
-def write_aa_sasa_surface(mol_atoms, mol_name, outdir=".", prefix="", ndots=240, sasa=None):
+def write_aa_sasa_surface(mol_atoms, mol_name, sasa, outdir=".", prefix="", ndots=240):
     """
     Write the atomistic structure and surface dots of the first molecule of
     ``mol_atoms`` in the frame whose SASA is closest to the median, as
@@ -304,7 +128,8 @@ def write_aa_sasa_surface(mol_atoms, mol_name, outdir=".", prefix="", ndots=240,
         the selected frame and the indices of the atoms of that molecule
     """
     molecule = split_molecules(mol_atoms)[0]
-    frame = closest_to_median(_first_molecule_sasa(molecule, sasa, cg=False))
+    # the first n_frames values of the concatenated series belong to the first molecule
+    frame = closest_to_median(sasa[:molecule.universe.trajectory.n_frames])
     trajectory = molecule.universe.trajectory
     current = trajectory.ts.frame
     trajectory[frame]
@@ -316,7 +141,7 @@ def write_aa_sasa_surface(mol_atoms, mol_name, outdir=".", prefix="", ndots=240,
     print(f"INFO - SASA of the written {mol_name} surface: {area:.3f} nm^2")
     return frame, set(molecule.indices.tolist())
 
-def write_cg_sasa_surface(mol_atoms, molname, reference, outdir=".", prefix="", ndots=240, sasa=None):
+def write_cg_sasa_surface(mol_atoms, molname, reference, sasa, outdir=".", prefix="", ndots=240):
     """
     Write the surface dots of a simulated CG structure that is as similar as
     possible to the mapped atomistic structure written by 'ff_map -sasa-surface'
@@ -357,7 +182,7 @@ def write_cg_sasa_surface(mol_atoms, molname, reference, outdir=".", prefix="", 
         print(f"INFO - Frame {frame} of {molname} is closest to the mapped structure "
               f"(RMSD {rmsd / 10:.3f} nm); superposing it onto the mapped structure.")
     else:
-        frame = closest_to_median(_first_molecule_sasa(molecule, sasa, cg=True))
+        frame = closest_to_median(sasa[:molecule.universe.trajectory.n_frames])
         frame_positions = positions[frame]
 
     area = write_sasa_surface(molecule, frame_positions, Path(outdir) / f"{prefix}{molname}_sasa_dots_CG.pdb",
