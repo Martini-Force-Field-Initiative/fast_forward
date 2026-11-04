@@ -82,7 +82,7 @@ Calculating the solvent accessible surface area (SASA)
 ======================================================
 
 Additionally, the solvent accessible surface area (SASA) can be calculated for each molecule in the system using the
-``-sasa`` option (this requires MDTraj). Pass the directory you also use for the ``ff_inter`` reference distributions,
+``-sasa`` option. Pass the directory you also use for the ``ff_inter`` reference distributions,
 so that ``ff_assess`` finds everything in one place:
 
 .. code-block::

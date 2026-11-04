@@ -168,13 +168,12 @@ Solvent Accessible Surface Area (SASA)
 
 The solvent accessible surface area (SASA) is a measure of the molecular shape and volume.
 
-In fast_forward, the SASA is calculated with the Shrake-Rupley algorithm (as implemented in MDTraj), which
-places test points on spheres around every atom, enlarged by the radius of a probe representing a water molecule
-(0.191 nm), and counts the points that are not buried by neighbouring atoms. Atomistic structures use the van der
-Waals radii of Rowland and Taylor; coarse-grained beads use 0.264, 0.230 and 0.191 nm for regular, small and tiny
-beads.
+In fast_forward, the SASA is calculated as in ``gmx sasa`` (Shrake-Rupley algorithm): test points (dots) are
+placed on a sphere around every atom, enlarged by the radius of a probe representing a water molecule (0.191 nm),
+and the dots that are not buried by neighbouring atoms are counted. The dots are distributed as in ``gmx sasa``
+(4842 dots per atom).
 
-The SASA calculation is enabled with the ``-sasa`` option, which requires MDTraj (``pip install mdtraj``).
+The SASA calculation is enabled with the ``-sasa`` option.
 The SASA is calculated for every copy of a molecule on its own, so copies do not bury each other. As for the
 interaction distributions, the time series of all copies are concatenated (all frames of the first copy, then
 of the second, ...). For each molecule type, the time series (``<mol>_sasa.dat``) and its distribution
