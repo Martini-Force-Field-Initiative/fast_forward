@@ -81,8 +81,26 @@ initial parameters for the molecule.
 Calculating the solvent accessible surface area (SASA)
 ======================================================
 
-Additionally, the solvent accessible surface area (SASA) can be calculated for each molecule in the system using the `-sasa` option. 
-This will generate text files with time series and distribution data for each residue, which can be used for for comparison with the CG trajectory using ``ff_assess``.
+Additionally, the solvent accessible surface area (SASA) can be calculated for each molecule in the system using the
+``-sasa`` option (this requires MDTraj). Pass the directory you also use for the ``ff_inter`` reference distributions,
+so that ``ff_assess`` finds everything in one place:
+
+.. code-block::
+
+    ff_map -f atomistic.xtc -s atomistic.tpr -m GSH.map -o mapped.xtc -mols GSH -sasa mapping_and_interactions -sasa-surface
+
+This writes the SASA of GSH in every frame (``GSH_sasa.dat``) and its distribution (``GSH_sasa_distr.dat``),
+which ``ff_assess`` uses as the reference for the CG model. With several copies of a molecule, the SASA of each
+copy is calculated on its own.
+
+With ``-sasa-surface``, ``ff_map`` additionally picks the frame whose SASA is closest to the median and writes
+
+* ``GSH_sasa_dots_AA.pdb``: the atomistic structure (ATOM records) together with the dots of its solvent accessible
+  surface (HETATM records, atom and residue name ``DOT``), and
+* ``GSH_sasa_mapped.pdb``: the mapped CG structure of the same frame, which ``ff_assess -sasa-surface`` uses to pick
+  a matching CG structure.
+
+The surface can be viewed in VMD by showing ``resname DOT`` as points, e.g. with the Lines drawing method.
 
 
 

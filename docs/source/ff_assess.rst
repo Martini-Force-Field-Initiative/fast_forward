@@ -30,7 +30,12 @@ Options
     -dists [DISTRIBUTION_DATA]
                       Save text files with time series and distribution data for interactions. Optionally
                       provide a path (default: current dir). (default: None)
-	-sasa             Calculate the solvent accessible surface area (SASA) of the system.
+    -sasa                 Calculate the solvent accessible surface area (SASA) of the system. (default: None)
+    -sasa-surface         With -sasa: write the CG frame closest to the mapped structure from 'ff_map -sasa-surface'
+                      (<mol>_sasa_mapped.pdb in the -d directory), superposed onto it, together with its surface
+                      dots as <mol>_sasa_dots_CG.pdb. Files go to the -dists path. (default: False)
+    -sasa-ndots SASA_NDOTS
+                      Minimum number of surface dots per bead for -sasa-surface. (default: 240)
     -interactions-only    Only assess bonded interaction distributions (bonds, angles, dihedrals); skip the
                       pairwise distance assessment entirely. (default: False)
 
@@ -43,6 +48,11 @@ The simulated trajectory of a new model of a molecule could be assessed like so:
 .. code-block::
 
     ff_assess -f vis.xtc -s vis.tpr -i molecule.itp -d /path/to/reference/files/ -plots -sasa
+
+With ``-sasa`` the SASA distribution of each molecule is scored against the atomistic reference
+``<mol>_sasa_distr.dat`` written by ``ff_map -sasa`` into the reference directory. Adding ``-sasa-surface``
+also writes the surface of a representative CG structure for visual comparison with the atomistic one;
+see :ref:`SASA surfaces <sasa-surfaces>` in the ``ff_map`` documentation.
 
 .. note::
 
