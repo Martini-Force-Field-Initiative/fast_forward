@@ -212,7 +212,8 @@ def assess_sasa(u, molnames, file_map, args):
         print("WARNING - No SASA could be assessed.")
         return
     if args.plots:
-        make_distribution_plot(sasa_plot_data, name=f'{args.plots}/sasa_distributions')
+        make_distribution_plot(sasa_plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions',
+                               data_name='plot_data_sasa.p')
     report_sasa(h_score_dict, score_dict, mean_dict)
 
 
@@ -230,7 +231,7 @@ def _main():
     parser.add_argument('-outliers', default=False, action='store_true', dest='exclude_outliers',
                         help='exclude outliers from overall score')
     parser.add_argument('-plot-data', default=False, action='store_true', dest="plot_data",
-                        help='save data for making plots as single pickle file')
+                        help='save data for making plots as single pickle file (implies -plots)')
     parser.add_argument('-score-weight', dest='hellinger_weight', type=float, default=0.7,
                         help='weight of the Hellinger distance in the distance score')
     parser.add_argument('-include-constraints', default=False, action='store_true', dest='include_constraints',
@@ -253,6 +254,9 @@ def _main():
                              "superposed onto it; without it, in the frame with median SASA.")
 
     args = parser.parse_args()
+    # saving the plot data implies making the plots (in the current dir by default)
+    if args.plots is None and args.plot_data:
+        args.plots = "."
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
     if args.sasa and not (args.tprfile and args.itp_files):
@@ -323,7 +327,7 @@ def _main():
                         [args.hellinger_weight, 1-args.hellinger_weight], inter_type
                         )
                     score_dict[inter_type][group_name] = score
-                    if args.plot_data:
+                    if args.plots:
                         plot_data[inter_type][group_name] = {"x": reference_data.T[0],
                                                          "Reference": reference_data.T[1],
                                                          'Simulated': probs}
@@ -363,7 +367,7 @@ def _main():
                     if args.plots:
                         make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
                         make_distances_distribution_plot(
-                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
+                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=args.plot_data
                         )
 
                     report_distances(score_m, molname, atom_names)
