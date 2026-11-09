@@ -11,7 +11,8 @@ from .interaction_distribution import INTERACTIONS
 X_LABELS={'bonds': 'Distance [Å]',
           'angles': 'Angle [°]',
           'dihedrals': 'Angle [°]',
-          'distances': 'Distance [Å]'}
+          'distances': 'Distance [Å]',
+          'sasa': 'SASA [nm²]'}
 
 def _plotter(data, atom_list, inter_type, ax):
 
@@ -24,8 +25,15 @@ def _plotter(data, atom_list, inter_type, ax):
                 label=key)
     ax.legend()
     ax.set_title(f'{atom_list} {inter_type}')
-    ax.set_xlim(INTERACTIONS[inter_type].get('bins')[0],
-                INTERACTIONS[inter_type].get('bins')[-1])
+    xmin, xmax = INTERACTIONS[inter_type].get('bins')[0], INTERACTIONS[inter_type].get('bins')[-1]
+    if inter_type == 'sasa':
+        # the SASA bins span all molecule sizes: zoom to the populated range
+        populated = np.flatnonzero(np.any([np.asarray(data[key]) > 0 for key in needed_keys], axis=0))
+        if populated.size:
+            low, high = data['x'][populated[0]], data['x'][populated[-1]]
+            pad = max(0.25 * (high - low), 0.1)
+            xmin, xmax = max(xmin, low - pad), min(xmax, high + pad)
+    ax.set_xlim(xmin, xmax)
     ax.set_xlabel(X_LABELS[inter_type])
 
 

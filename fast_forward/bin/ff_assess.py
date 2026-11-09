@@ -15,6 +15,7 @@ from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
 from fast_forward.score import hellinger, score_matrix, calc_score
+from fast_forward.sasa import MoleculeSASA #, sasa_file_names
 from collections import defaultdict
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
@@ -114,6 +115,107 @@ def report_distances(score_matrix, molname, atom_names):
     with open('report_distances.out', 'w') as fout:
         fout.writelines(printable)
 
+def report_sasa(h_score_dict, score_dict, mean_dict):
+    """
+    Print out a report of the solvent accessible surface area (SASA) scores.
+
+    Parameters
+    ----------
+    h_score_dict : dict
+        Hellinger distance of the SASA distribution of every molecule.
+    score_dict : dict
+        Score of the SASA distribution of every molecule.
+    mean_dict : dict
+        (mean CG SASA, mean reference SASA) of every molecule, nm^2.
+    """
+    buff = ''
+    buff += " [ Solvent Accessible Surface Area (SASA) Report ]\n"
+    buff += f"   Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
+
+    buff += " SASA Scores:\n"
+    buff += " 0 - identical, 1 - no overlap\n\n"
+
+    buff += " Score guide:\n"
+    buff += "   0.0-0.3 : good\n"
+    buff += "   0.3-0.5 : ok\n"
+    buff += "   0.5-1.0 : bad\n\n"
+    buff += "\t\tHellinger distance (Scoring function)   <SASA> CG / reference [nm^2]\n\n"
+
+    overall_scores = []
+    for molname, h_score in h_score_dict.items():
+        score = score_dict[molname]
+        cg_mean, ref_mean = mean_dict[molname]
+        buff += f"\t{molname:20s}: {h_score:.2f} ({score:.2f})   {cg_mean:.2f} / {ref_mean:.2f}\n"
+        overall_scores.append(score)
+
+    printable = buff.format(mean=np.array(overall_scores).mean(),
+                            sem=np.array(overall_scores).std()/np.sqrt(len(overall_scores)))
+    print(printable)
+    with open('report_sasa.out', 'w') as fout:
+        fout.writelines(printable)
+
+
+def assess_sasa(u, molnames, file_map, args):
+    """
+    Score the SASA distribution of every molecule of the CG trajectory against the
+    reference written by 'ff_map -sasa', and report it.
+    """
+    print("INFO - Evaluating SASA")
+    h_score_dict = {}
+    score_dict = {}
+    mean_dict = {}
+    sasa_plot_data = defaultdict(dict)
+    for molname in molnames:
+        print(f"INFO - Calculating SASA of {molname}")
+        mol_atoms = u.select_atoms(f"moltype {molname}")
+        if mol_atoms.n_atoms == 0:
+            print(f"WARNING - No molecules of type {molname} in the trajectory; skipping its SASA.")
+            continue
+        reference_name = f"{args.prefix}{molname}_sasa_distr.dat"
+        # _, reference_name = sasa_file_names(molname, args.prefix)
+        try:
+            ref_file = file_map[reference_name]
+        except KeyError:
+            available = sorted(name for name in file_map if name.endswith('_sasa_distr.dat'))
+            msg = (f"{reference_name} file not found! Generate the reference SASA with "
+                   f"'ff_map -sasa {args.reference} -mols <AA name>:{molname}' to name it after the CG "
+                   f"molecule.")
+            if available:
+                msg += f" SASA references found: {', '.join(available)}."
+            if args.prefix == "":
+                msg += (" your prefix is set to the default value: consider changing it to the "
+                        "actual prefix.")
+            raise FileNotFoundError(msg) from None
+
+        mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=args.prefix)
+        if args.distribution_data:
+            mol_sasa.save(args.distribution_data)
+        probs = mol_sasa.distribution.T[1]
+        reference_data = np.genfromtxt(ref_file)
+        ref_probs = reference_data.T[1]
+        if probs.sum() == 0 or ref_probs.sum() == 0:
+            print(f"WARNING - Empty SASA distribution for {molname}; skipping its score.")
+            continue
+        # calculate hellinger distance between simulated and reference distributions
+        h_score_dict[molname] = hellinger(probs/probs.sum(), ref_probs/ref_probs.sum())
+        score_dict[molname] = calc_score(ref_probs/ref_probs.sum(), probs/probs.sum(),
+                                         [args.hellinger_weight, 1-args.hellinger_weight], 'sasa')
+        mean_dict[molname] = (mol_sasa.series.mean(), np.average(reference_data.T[0], weights=ref_probs))
+
+        if args.sasa_surface:
+            mol_sasa.write_cg_surface(reference_dir=args.reference, outdir=args.distribution_data or ".")
+        if args.plots:
+            sasa_plot_data['sasa'][molname] = {"x": reference_data.T[0],
+                                               "Reference": ref_probs,
+                                               "Simulated": probs}
+    if not score_dict:
+        print("WARNING - No SASA could be assessed.")
+        return
+    if args.plots:
+        make_distribution_plot(sasa_plot_data, name=f'{args.plots}/sasa_distributions')
+    report_sasa(h_score_dict, score_dict, mean_dict)
+
+
 def _main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
     parser.add_argument('-f', type=str, dest="trajfile", help="simulated trajectory file")
@@ -139,8 +241,22 @@ def _main():
     parser.add_argument('-interactions-only', default=False, action='store_true', dest='interactions_only',
                         help="Only assess bonded interaction distributions (bonds, angles, dihedrals); skip "
                              "the pairwise distance assessment entirely.")
+    parser.add_argument('-sasa', default=False, action='store_true', dest='sasa',
+                        help="Assess the solvent accessible surface area (SASA) of every molecule with fastsasa "
+                             "(Martini bead radii from the bead types) against the reference written by "
+                             "'ff_map -sasa' (<prefix><mol>_sasa_distr.dat in the -d directory). Requires -s (tpr) "
+                             "and -i. With -dists, the CG time series and distribution are saved as well.")
+    parser.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
+                        help="With -sasa: write the CG structure and its surface dots (<prefix><mol>_sasa_dots_CG.pdb) "
+                             "to the -dists path (default: current dir), in the frame closest to the mapped structure "
+                             "from 'ff_map -sasa-surface' (<prefix><mol>_sasa_mapped.pdb in the -d directory), "
+                             "superposed onto it; without it, in the frame with median SASA.")
 
     args = parser.parse_args()
+    if args.sasa_surface and not args.sasa:
+        parser.error("-sasa-surface requires -sasa")
+    if args.sasa and not (args.tprfile and args.itp_files):
+        parser.error("-sasa requires -s (tpr, for the molecule types) and -i (itp files)")
 
     distribution_files = glob(f'{args.reference}/*distr.dat')
     # create file map
@@ -251,6 +367,10 @@ def _main():
                         )
 
                     report_distances(score_m, molname, atom_names)
+
+        # evaluation of the solvent accessible surface area
+        if args.sasa:
+            assess_sasa(u, ff.blocks.keys(), file_map, args)
 
 def main():
     try:

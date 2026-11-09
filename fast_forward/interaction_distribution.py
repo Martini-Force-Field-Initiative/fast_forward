@@ -12,6 +12,8 @@ INTERACTIONS = {'bonds': {'bins': np.arange(0, 7, 0.01)
                               },
                 'distances': {'bins': np.arange(0, 30, 0.05) # might need adjustment to allow for larger molecules
                               },
+                'sasa': {'bins': np.arange(0, 100, 0.01) # nm^2, solvent accessible surface area per molecule
+                         },
                 'virtual_sitesn': {'interaction_types': {'1': 'virtual_sitesn'},
                                    'array_shape': {'virtual_sitesn': 1}
                                    },
@@ -29,7 +31,40 @@ INTERACTIONS = {'bonds': {'bins': np.arange(0, 7, 0.01)
                                    }
                 }
 VS_TYPES = [key for key in INTERACTIONS.keys() if 'virtual' in key]
-RECOGNISED_INTERACTIONS = list(INTERACTIONS.keys())
+# sasa is a property of whole molecules, not a bonded interaction
+RECOGNISED_INTERACTIONS = [key for key in INTERACTIONS.keys() if key != 'sasa']
+
+def distribution(series, inter_type, name=""):
+    """
+    Distribution of the values of an interaction (or of the SASA) in the bins
+    defined for its type in :data:`INTERACTIONS`, which are also used for scoring.
+
+    Values outside of the bins are not counted; a warning reports how many.
+
+    Parameters
+    ----------
+    series : np.ndarray
+        values of the interaction, e.g. its time series
+    inter_type : str
+        interaction type, a key of :data:`INTERACTIONS` with bins
+    name : str
+        name of the interaction group or molecule, for the warning
+
+    Returns
+    -------
+    np.ndarray
+        (n_bins, 2) columns: bin centre, probability density
+    """
+    bins = INTERACTIONS[inter_type]['bins']
+    series = np.asarray(series)
+    outside = np.count_nonzero((series < bins[0]) | (series > bins[-1]))
+    if outside:
+        label = f"{name} {inter_type}" if name else inter_type
+        print(f"WARNING - {outside} of {len(series)} values of {label} lie outside of the histogram range "
+              f"({bins[0]:g} to {bins[-1]:g}) and are ignored in the distribution.")
+    probs, edges = np.histogram(series, density=True, bins=bins)
+    center_points = edges[:-1] + np.diff(edges) / 2.
+    return np.transpose((center_points, probs))
 
 def interaction_distribution(u, inter_name, pair_idxs, group_name="", prefix="", save=None, parameters=[]):
     # i.e. if inter_type not one of virtual_sitesn, virtual_sites3fd, etc.
@@ -47,9 +82,7 @@ def interaction_distribution(u, inter_name, pair_idxs, group_name="", prefix="",
                                                                 inter_type=inter_type,
                                                                 prefix=prefix),
                        time_series)
-        probs, edges = np.histogram(time_series, density=True, bins=INTERACTIONS[inter_type].get('bins'))
-        center_points = edges[:-1] + np.diff(edges)/2.
-        distr = np.transpose((center_points, probs))
+        distr = distribution(time_series, inter_type, group_name)
         if save:
             np.savetxt("{dir}/{prefix}{name}_{inter_type}_distr.dat".format(dir=save,
                                                                       name=group_name,
