@@ -95,7 +95,7 @@ def report_distances(score_matrix, molname, atom_names):
     with open('report_distances.out', 'w') as fout:
         fout.writelines(printable)
 
-def report_sasa(h_score_dict, score_dict, mean_dict):
+def report_sasa(h_score_dict, score_dict, mean_dict, bead_dict=None):
     """
     Print out a report of the solvent accessible surface area (SASA) scores.
 
@@ -107,6 +107,9 @@ def report_sasa(h_score_dict, score_dict, mean_dict):
         Score of the SASA distribution of every molecule.
     mean_dict : dict
         (mean CG SASA, mean reference SASA) of every molecule, nm^2.
+    bead_dict : dict, optional
+        {molecule: {bead: (Hellinger distance, score, mean CG SASA, mean reference SASA)}}
+        of the beads of every molecule; reported per molecule, with the mean bead score.
     """
     buff = ''
     buff += " [ Solvent Accessible Surface Area (SASA) Report ]\n"
@@ -130,6 +133,16 @@ def report_sasa(h_score_dict, score_dict, mean_dict):
 
     printable = buff.format(mean=np.array(overall_scores).mean(),
                             sem=np.array(overall_scores).std()/np.sqrt(len(overall_scores)))
+
+    # SASA of the beads, per molecule
+    for molname, beads in (bead_dict or {}).items():
+        bead_scores = np.array([score for _, score, _, _ in beads.values()])
+        printable += (f"\n [ Bead SASA of {molname} ]\n"
+                      f"   Overall Bead Score : {bead_scores.mean():.3} ± "
+                      f"{bead_scores.std()/np.sqrt(len(bead_scores)):.3}\n\n")
+        for bead, (h_score, score, cg_mean, ref_mean) in beads.items():
+            printable += f"\t{bead:20s}: {h_score:.2f} ({score:.2f})   {cg_mean:.2f} / {ref_mean:.2f}\n"
+
     print(printable)
     with open('report_sasa.out', 'w') as fout:
         fout.writelines(printable)
