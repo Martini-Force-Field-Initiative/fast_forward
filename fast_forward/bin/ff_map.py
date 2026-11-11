@@ -120,7 +120,10 @@ def main():
                             help="Calculate the solvent accessible surface area (SASA) of every molecule of the "
                                  "atomistic trajectory with fastsasa, and save its time series and distribution "
                                  "(<prefix><mol>_sasa[_distr].dat, <mol>: the CG molecule name given with -mols AA:CG) "
-                                 "as reference for 'ff_assess -sasa'. Optionally "
+                                 "as reference for 'ff_assess -sasa', and that of every bead of the mapping "
+                                 "(<prefix><mol>_<resid>_<bead>_sasa[_distr].dat): the SASA of every atom goes to its "
+                                 "bead, an atom shared by k beads gives 1/k to each; dummy beads (all their atoms in "
+                                 "other beads) are left out. Optionally "
                                  "provide a path (default: current dir); use the same directory as for "
                                  "'ff_inter -dists'.")
     sasa_group.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
@@ -242,6 +245,8 @@ def main():
                       f"if the CG molecule type is not named {mol_name}.")
             print(f"INFO - Calculating SASA of {mol_name} (CG molecule {cg_name})")
             mol_sasa = MoleculeSASA(mol_atoms, cg_name, cg=False, prefix=args.prefix)
+            # split the SASA of the atoms over the beads of the mapping
+            mol_sasa.map_to_beads(mapped_atoms, cg_universe)
             mol_sasa.save(args.sasa)
             print(f"INFO - SASA of {mol_name}: {mol_sasa.series.mean():.3f} ± {mol_sasa.series.std():.3f} nm^2")
             if args.sasa_surface:

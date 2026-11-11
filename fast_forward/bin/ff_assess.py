@@ -21,67 +21,6 @@ from collections import defaultdict
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
-def assess_sasa(u, molnames, file_map, args):
-    """
-    Score the SASA distribution of every molecule of the CG trajectory against the
-    reference written by 'ff_map -sasa', and report it.
-    """
-    print("INFO - Evaluating SASA")
-    h_score_dict = {}
-    score_dict = {}
-    mean_dict = {}
-    sasa_plot_data = defaultdict(dict)
-    for molname in molnames:
-        print(f"INFO - Calculating SASA of {molname}")
-        mol_atoms = u.select_atoms(f"moltype {molname}")
-        if mol_atoms.n_atoms == 0:
-            print(f"WARNING - No molecules of type {molname} in the trajectory; skipping its SASA.")
-            continue
-        reference_name = f"{args.prefix}{molname}_sasa_distr.dat"
-        try:
-            ref_file = file_map[reference_name]
-        except KeyError:
-            available = sorted(name for name in file_map if name.endswith('_sasa_distr.dat'))
-            msg = (f"{reference_name} file not found! Generate the reference SASA with "
-                   f"'ff_map -sasa {args.reference} -mols <AA name>:{molname}' to name it after the CG "
-                   f"molecule.")
-            if available:
-                msg += f" SASA references found: {', '.join(available)}."
-            if args.prefix == "":
-                msg += (" your prefix is set to the default value: consider changing it to the "
-                        "actual prefix.")
-            raise FileNotFoundError(msg) from None
-
-        mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=args.prefix)
-        if args.distribution_data:
-            mol_sasa.save(args.distribution_data)
-        probs = mol_sasa.distribution.T[1]
-        reference_data = np.genfromtxt(ref_file)
-        ref_probs = reference_data.T[1]
-        if probs.sum() == 0 or ref_probs.sum() == 0:
-            print(f"WARNING - Empty SASA distribution for {molname}; skipping its score.")
-            continue
-        # calculate hellinger distance between simulated and reference distributions
-        h_score_dict[molname] = hellinger(probs/probs.sum(), ref_probs/ref_probs.sum())
-        score_dict[molname] = calc_score(ref_probs/ref_probs.sum(), probs/probs.sum(),
-                                         [args.hellinger_weight, 1-args.hellinger_weight], 'sasa')
-        mean_dict[molname] = (mol_sasa.series.mean(), np.average(reference_data.T[0], weights=ref_probs))
-
-        if args.sasa_surface:
-            mol_sasa.write_cg_surface(reference_dir=args.reference, outdir=args.distribution_data or ".")
-        if args.plots:
-            sasa_plot_data['sasa'][molname] = {"x": reference_data.T[0],
-                                               "Reference": ref_probs,
-                                               "Simulated": probs}
-    if not score_dict:
-        print("WARNING - No SASA could be assessed.")
-        return
-    if args.plots:
-        make_distribution_plot(sasa_plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions',
-                               data_name='plot_data_sasa.p')
-    report_sasa(h_score_dict, score_dict, mean_dict)
-
-
 def _main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
     parser.add_argument('-f', type=str, dest="trajfile", help="simulated trajectory file")
@@ -111,7 +50,8 @@ def _main():
                         help="Assess the solvent accessible surface area (SASA) of every molecule with fastsasa "
                              "(Martini bead radii from the bead types) against the reference written by "
                              "'ff_map -sasa' (<prefix><mol>_sasa_distr.dat in the -d directory). Requires -s (tpr) "
-                             "and -i. With -dists, the CG time series and distribution are saved as well.")
+                             "and -i. With -dists, the CG time series and distribution are saved as well, also for every "
+                             "bead except dummy beads of type U (<prefix><mol>_<resid>_<bead>_sasa[_distr].dat).")
     parser.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
                         help="With -sasa: write the CG structure and its surface dots (<prefix><mol>_sasa_dots_CG.pdb) "
                              "to the -dists path (default: current dir), in the frame closest to the mapped structure "
@@ -237,9 +177,67 @@ def _main():
 
                     report_distances(score_m, molname, atom_names)
 
-        # evaluation of the solvent accessible surface area
+        # evaluation of the solvent accessible surface area: score the SASA distribution of every
+        # molecule of the CG trajectory against the reference written by 'ff_map -sasa'
         if args.sasa:
-            assess_sasa(u, ff.blocks.keys(), file_map, args)
+            print("INFO - Evaluating SASA")
+            sasa_h_scores = {}
+            sasa_scores = {}
+            sasa_means = {}
+            sasa_plot_data = defaultdict(dict)
+            for molname in ff.blocks.keys():
+                print(f"INFO - Calculating SASA of {molname}")
+                mol_atoms = u.select_atoms(f"moltype {molname}")
+                if mol_atoms.n_atoms == 0:
+                    print(f"WARNING - No molecules of type {molname} in the trajectory; skipping its SASA.")
+                    continue
+                reference_name = f"{args.prefix}{molname}_sasa_distr.dat"
+                try:
+                    ref_file = file_map[reference_name]
+                except KeyError:
+                    available = sorted(name for name in file_map if name.endswith('_sasa_distr.dat'))
+                    msg = (f"{reference_name} file not found! Generate the reference SASA with "
+                           f"'ff_map -sasa {args.reference} -mols <AA name>:{molname}' to name it after the CG "
+                           f"molecule.")
+                    if available:
+                        msg += f" SASA references found: {', '.join(available)}."
+                    if args.prefix == "":
+                        msg += (" your prefix is set to the default value: consider changing it to the "
+                                "actual prefix.")
+                    raise FileNotFoundError(msg) from None
+
+                mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=args.prefix)
+                if args.distribution_data:
+                    # also save the SASA of every bead (without dummies), as the interactions
+                    mol_sasa.cg_bead_sasa(ff.blocks[molname])
+                    mol_sasa.save(args.distribution_data)
+                probs = mol_sasa.distribution.T[1]
+                reference_data = np.genfromtxt(ref_file)
+                ref_probs = reference_data.T[1]
+                if probs.sum() == 0 or ref_probs.sum() == 0:
+                    print(f"WARNING - Empty SASA distribution for {molname}; skipping its score.")
+                    continue
+                
+                # calculate scores
+                sasa_h_scores[molname] = hellinger(probs/probs.sum(), ref_probs/ref_probs.sum())
+                sasa_scores[molname] = calc_score(ref_probs/ref_probs.sum(), probs/probs.sum(),
+                                                 [args.hellinger_weight, 1-args.hellinger_weight], 'sasa')
+                sasa_means[molname] = (mol_sasa.series.mean(), np.average(reference_data.T[0], weights=ref_probs))
+
+                if args.sasa_surface:
+                    mol_sasa.write_cg_surface(reference_dir=args.reference, outdir=args.distribution_data or ".")
+                if args.plots:
+                    sasa_plot_data['sasa'][molname] = {"x": reference_data.T[0],
+                                                       "Reference": ref_probs,
+                                                       "Simulated": probs}
+            if not sasa_scores:
+                print("WARNING - No SASA could be assessed.")
+            else:
+                if args.plots:
+                    make_distribution_plot(sasa_plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions',
+                                           data_name='plot_data_sasa.p')
+                report_sasa(sasa_h_scores, sasa_scores, sasa_means)
+
 
 def main():
     try:
