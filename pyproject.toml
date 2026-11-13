@@ -58,6 +58,7 @@ Article = "https://pubs.acs.org/jcisd8/article-abstract/doi/10.1021/acs.jcim.6c0
 
 [project.optional-dependencies]
 numba = ["numba"]
+sasa = ["sassy @ git+https://github.com/ThallmairLab/sassy"]
 
 [dependency-groups]
 docs = [

@@ -72,7 +72,7 @@ def main():
                         dest="plots",
                         help="Plot the reference and fits of bonded interactions. Optionally provide a path (default: current dir).")
     parser.add_argument('-plot-data', default=False, action="store_true",
-                        dest="plot_data", help="Save a pickle file containing the input data for the plots")
+                        dest="plot_data", help="Save a pickle file containing the input data for the plots (implies -plots)")
     parser.add_argument('-constraints', dest='constraint_convert', default=10000, type=int,
                         help="Force constant above which to convert bonds to constraints")
     parser.add_argument('-temperature', dest='temperature', type=int, default=310,
@@ -92,6 +92,9 @@ def main():
                         dest="estimate_lincs", help="Estimate the LINCS order required for solving the constraints in the molecule(s)")
 
     args = parser.parse_args()
+    # saving the plot data implies making the plots (in the current dir by default)
+    if args.plots is None and args.plot_data:
+        args.plots = "."
 
     # load trajectory
     if args.tprfile:
