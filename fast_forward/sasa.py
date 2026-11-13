@@ -1,9 +1,9 @@
 """
 Solvent accessible surface area (SASA) of molecules over a trajectory.
 
-The SASA itself is computed with ``fastsasa`` (Shrake-Rupley,
-every molecule on its own, so the SASA describes the shape of a molecule and not its
-exposure in the surrounding system):
+The SASA itself is computed with ``sassy`` (Shrake-Rupley, every molecule as a body
+on its own, so the SASA describes the shape of a molecule and not its exposure in the
+surrounding system):
 
 - ``ff_map -sasa`` computes the SASA of the atomistic (AA) trajectory, with the
   atomistic van der Waals radii, and saves its distribution as the reference.
@@ -31,17 +31,45 @@ from fast_forward import DATA_PATH
 from fast_forward.interaction_distribution import distribution
 
 
-def _fastsasa():
+REFERENCE = 'reference' # ff_assess -sasa-surface: the frame closest to the mapped structure of ff_map
+FALLBACK_STATISTIC = 'mode' # without a usable mapped structure
+
+
+def _sassy():
     """
-    Import fastsasa
+    Import sassy
     """
     try:
-        import fastsasa
+        import sassy
     except ImportError as err:
-        msg = ("The SASA calculation (-sasa) requires the 'fastsasa' package, which is not "
-               "installed. Install it (e.g. 'pip install /path/to/fastsasa') and try again.")
+        msg = ("The SASA calculation (-sasa) requires the 'sassy' package, which is not "
+               "installed. Install it (e.g. 'pip install git+https://github.com/ThallmairLab/sassy') "
+               "and try again.")
         raise ImportError(msg) from err
-    return fastsasa
+    return sassy
+
+
+def surface_statistic(value, allow_reference=False):
+    """
+    The statistic choosing the representative frame of a surface (``-sasa-stat``): a
+    name of ``sassy.STATISTICS`` ('median', 'mean', 'mode', 'q1', 'q3', 'min', 'max',
+    'mean+std', 'mean-std') or a fixed SASA (nm^2); with ``allow_reference`` also
+    'reference' (the frame closest to the mapped structure of ``ff_map``).
+
+    Raises
+    ------
+    ValueError
+        if ``value`` is none of them
+    """
+    statistics = _sassy().STATISTICS
+    if value in statistics or (allow_reference and value == REFERENCE):
+        return value
+    try:
+        return float(value)
+    except ValueError:
+        known = [REFERENCE] * allow_reference + list(statistics)
+        raise ValueError(f"unknown statistic {value!r}: use one of {', '.join(known)} "
+                         "or a SASA in nm^2") from None
 
 
 def _citation_map():
@@ -55,11 +83,11 @@ def cite_aa_radii(ag: mda.AtomGroup):
     Print the citations of the atomistic van der Waals radii used for the SASA of
     ag: Rowland & Taylor (1996), and Bondi (1964) for phosphorus if ag has any.
     """
-    fastsasa = _fastsasa()
+    sassy = _sassy()
     citation_map = _citation_map()
     cite_string = citation_formatter(citation_map['VDW_radii'])
     print(f"\nSASA calculation uses atomistic van der Waals radii from:\n{cite_string}\n")
-    if 'P' in fastsasa.atom_symbols(ag, cg=False):
+    if 'P' in sassy.atom_symbols(ag, cg=False):
         cite_string = citation_formatter(citation_map['VDW_radii_P'])
         print(f"\nPhosphorus atoms use atomistic van der Waals radii from:\n{cite_string}\n")
 
@@ -136,7 +164,8 @@ def map_sasa(atom_sasa, beads):
 class MoleculeSASA:
     """
     SASA of all molecules of one type over a trajectory, computed once with a single
-    :class:`fastsasa.SASA`, which is then also used for the surface structures.
+    :class:`sassy.SASA` (every molecule a body on its own), which is then also used for
+    the surface structures.
 
     As for the interaction distributions, the time series of all molecules are
     concatenated (all frames of the first molecule, then of the second, ...) and
@@ -154,12 +183,12 @@ class MoleculeSASA:
     prefix : str
         common prefix of the file names
     ndots : int, optional
-        minimum number of surface dots per particle (default: that of fastsasa)
+        minimum number of surface dots per particle (default: that of sassy)
 
     Attributes
     ----------
-    sasa : fastsasa.SASA
-        the SASA after its run
+    sasa : sassy.SASA
+        the SASA after its run; its :class:`sassy.Results` in ``sasa.results``
     series : np.ndarray
         (n_molecules * n_frames,) SASA of every molecule in every frame (nm^2)
     distribution : np.ndarray
@@ -183,20 +212,20 @@ class MoleculeSASA:
         self.prefix = prefix
         kwargs = {} if ndots is None else {'ndots': ndots}
         
-        self.sasa = _fastsasa().SASA(ag, cg=cg, per_molecule=True, save_atoms=True, **kwargs)
-        self.sasa.run(verbose=True)
-        
+        self.sasa = _sassy().SASA(ag, cg=cg, bodies='molecule', keep_atoms=True, **kwargs)
+        results = self.sasa.run(verbose=True, name=mol_name)
+
         if not cg: # cite the AA radii papers
             cite_aa_radii(ag)
 
-        self.series = np.asarray(self.sasa.molecule_sasa).ravel() # (n_molecules * n_frames,) SASA of every molecule in every frame
+        self.series = results.body_sasa.ravel() # (n_molecules * n_frames,) SASA of every molecule in every frame
         self.distribution = distribution(self.series, 'sasa', mol_name) 
         self.bead_names = self.bead_series = self.bead_distributions = None
 
     @property
     def molecule_type(self):
-        """fastsasa type of the molecules (all of ag are of one type)"""
-        return self.sasa.molecule_types[0]
+        """sassy body type of the molecules (all of ag are of one type)"""
+        return self.sasa.body_type_labels[0]
 
     def file_name(self, suffix, outdir="."):
         """``<outdir>/<prefix><mol_name>_<suffix>``"""
@@ -215,8 +244,8 @@ class MoleculeSASA:
 
     def _molecule_rows(self):
         """Rows of the atom SASA (positions in ag) of the atoms of every molecule."""
-        molecules = _fastsasa().molecule_index(self.sasa.ag)
-        return [np.flatnonzero(molecules == m) for m in range(self.sasa.n_molecules)]
+        molecules = self.sasa.results.atom_body # (n_atoms,) molecule (body) of every atom
+        return [np.flatnonzero(molecules == m) for m in range(self.sasa.n_bodies)]
 
     def _set_bead_sasa(self, names, sasa_per_molecule):
         """
@@ -224,12 +253,12 @@ class MoleculeSASA:
         SASA of the atoms.
         """
         self.bead_names = list(names)
-        n_frames = len(self.series) // max(1, self.sasa.n_molecules)
+        n_frames = len(self.series) // max(1, self.sasa.n_bodies)
         self.bead_series = (np.concatenate(sasa_per_molecule, axis=1) if sasa_per_molecule
                             else np.zeros((len(names), n_frames))) # (n_beads, n_molecules * n_frames) one row per bead, the molecules concatenated
         self.bead_distributions = [distribution(series, 'sasa', f"{self.mol_name} {name}")
                                    for name, series in zip(self.bead_names, self.bead_series)]
-        self.sasa.sasa = None # the SASA of the atoms is no longer needed
+        self.sasa.results.atom_sasa = None # the SASA of the atoms is no longer needed
 
     def map_to_beads(self, mapped_atoms, cg_universe):
         """
@@ -280,7 +309,7 @@ class MoleculeSASA:
             local = np.full(ag.n_atoms, -1, dtype=np.int64) # universe index -> position in rows, -1 for atoms not in this molecule
             local[rows] = np.arange(len(rows))
             
-            bead_sasa, dummy, unassigned = map_sasa(self.sasa.sasa[rows], [local[r] for _, r in beads])
+            bead_sasa, dummy, unassigned = map_sasa(self.sasa.results.atom_sasa[rows], [local[r] for _, r in beads])
             resindices = cg_universe.atoms.resindices[bdxs] if bdxs else np.zeros(0, dtype=int)
             all_names = [f"{res - resindices.min() + 1}_{cg_universe.atoms[bdx].name}"
                          for bdx, res in zip(bdxs, resindices)]
@@ -340,33 +369,47 @@ class MoleculeSASA:
 
         # save the sasa of the remaining beads in the class attributes
         self._set_bead_sasa([all_names[i] for i in keep],
-                        [self.sasa.sasa[rows[keep]] for rows in molecule_rows])
+                        [self.sasa.results.atom_sasa[rows[keep]] for rows in molecule_rows])
 
-    def write_surface(self, outdir=".", reference=None):
+    def write_surface(self, outdir=".", reference=None, statistic=FALLBACK_STATISTIC):
         """
         Write the structure and its surface dots of one molecule as
-        ``<outdir>/<prefix><mol_name>_sasa_dots_<AA|CG>.pdb``.
+        ``<outdir>/<prefix><mol_name>_sasa_dots_<AA|CG>.pdb``. The B-factor of every atom and of its dots is the SASA of the atom (nm^2), and REMARK
+        records tell how the molecule and frame were chosen and which radii were used.
 
-        Without ``reference``, the molecule and frame whose SASA is closest to the median
-        of the molecule type are used, from the SASA already computed. With ``reference``
-        (an AtomGroup or (n_atoms, 3) positions in nm, as many atoms as one molecule), the
-        frame of the first molecule closest to it (lowest RMSD) is used, superposed onto it.
-        Only the surface dots of the written frame are computed (fewer dots per particle
-        than for the SASA, as they are for viewing).
+        Without ``reference``, the molecule and frame whose SASA is closest to ``statistic``
+        of the SASA distribution of the molecule type are used, from the SASA already
+        computed. With ``reference`` (an AtomGroup or (n_atoms, 3) positions in nm, as many
+        atoms as one molecule), the frame of the first molecule closest to it (lowest RMSD)
+        is used, superposed onto it. Only the surface dots of the written frame are computed
+        (fewer dots per particle than for the SASA, as they are for viewing).
+
+        Parameters
+        ----------
+        outdir : str or Path
+            directory of the file
+        reference : MDAnalysis.AtomGroup or np.ndarray, optional
+            structure to match the frame to
+        statistic : str or float
+            without ``reference``: a name of ``sassy.STATISTICS`` ('median', 'mean', 'mode',
+            'q1', 'q3', 'min', 'max', 'mean+std', 'mean-std') or a fixed SASA (nm^2);
+            default the mode (most probable SASA)
 
         Returns
         -------
-        fastsasa.Surface
+        sassy.Surface
             the written surface (structure, dots, area in nm^2 from the dots, frame, ...)
         """
         fname = self.file_name(f"sasa_dots_{'CG' if self.cg else 'AA'}.pdb", outdir)
-        surface = self.sasa.write_surface(fname, molecule_type=self.molecule_type, reference=reference,
-                                          return_surface=True)
+        surface = self.sasa.surface(body_type=self.molecule_type, reference=reference, statistic=statistic)
+        surface.write(fname)
 
-		# If a reference is given, report the RMSD to it
-        matched = f", RMSD {surface.rmsd:.3f} nm to the mapped structure" if surface.rmsd is not None else ""
-        print(f"INFO - Wrote SASA surface of {self.sasa.molecule_labels[surface.molecule]} in frame "
-              f"{surface.frame} ({surface.area:.2f} nm^2{matched}) to {fname}")
+        if surface.rmsd is not None: # a reference is given: report the RMSD to it
+            chosen = f"RMSD {surface.rmsd:.3f} nm to the mapped structure"
+        else:
+            chosen = f"closest to the {statistic if isinstance(statistic, str) else f'value {statistic:g} nm^2'}"
+        print(f"INFO - Wrote SASA surface of {self.sasa.body_labels[surface.body]} in frame "
+              f"{surface.frame} ({surface.area:.2f} nm^2, {chosen}) to {fname}")
         return surface
 
     def write_mapped_structure(self, surface, cg_universe, mapped_atoms, outdir="."):
@@ -377,7 +420,7 @@ class MoleculeSASA:
 
         Parameters
         ----------
-        surface : fastsasa.Surface
+        surface : sassy.Surface
             AA surface from :meth:`write_surface`
         cg_universe : MDAnalysis.Universe
             the mapped universe, bead i built from the AA atoms ``mapped_atoms[i]``
@@ -397,25 +440,29 @@ class MoleculeSASA:
         print(f"INFO - Wrote mapped structure of {self.mol_name} in frame {surface.frame} to {fname}")
         return fname
 
-    def write_cg_surface(self, reference_dir=None, outdir="."):
+    def write_cg_surface(self, reference_dir=None, outdir=".", statistic=REFERENCE):
         """
-        Write the CG surface (see :meth:`write_surface`) in the frame closest to the mapped
-        structure written by ``ff_map -sasa-surface``
-        (``<reference_dir>/<prefix><mol_name>_sasa_mapped.pdb``), so that the AA and CG
-        surfaces share one coordinate frame; without a matching mapped structure, in the
-        frame with median SASA.
+        Write the CG surface (see :meth:`write_surface`). With ``statistic='reference'``
+        (default), in the frame closest to the mapped structure written by
+        ``ff_map -sasa-surface`` (``<reference_dir>/<prefix><mol_name>_sasa_mapped.pdb``), so
+        that the AA and CG surfaces share one coordinate frame; without a matching mapped
+        structure, in the frame closest to the mode of the SASA. With any other statistic
+        (see :meth:`write_surface`), in the frame closest to it.
         """
+        if statistic != REFERENCE:
+            return self.write_surface(outdir, statistic=statistic)
+        statistic = FALLBACK_STATISTIC # if the mapped structure is missing or does not match
         reference = None
         mapped_file = self.file_name("sasa_mapped.pdb", reference_dir) if reference_dir else None
         if mapped_file is not None and mapped_file.is_file():
             reference = mda.Universe(str(mapped_file)).atoms
-            n_atoms = self.sasa.molecule_atoms(int(self.sasa.types[self.molecule_type][0])).n_atoms
+            n_atoms = self.sasa.body_atoms(int(self.sasa.body_type_indices[self.molecule_type][0])).n_atoms
             if reference.n_atoms != n_atoms:
                 print(f"WARNING - The mapped structure {mapped_file} has {reference.n_atoms} beads, but "
                       f"{self.mol_name} has {n_atoms}; writing the CG surface of the frame closest to the "
-                      "median SASA instead.")
+                      f"{statistic} SASA instead.")
                 reference = None
         else:
             print(f"INFO - No mapped structure {mapped_file} found; writing the CG surface of the frame "
-                  "closest to the median SASA instead.")
-        return self.write_surface(outdir, reference=reference)
+                  f"closest to the {statistic} SASA instead.")
+        return self.write_surface(outdir, reference=reference, statistic=statistic)

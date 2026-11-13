@@ -15,7 +15,7 @@ from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
 from fast_forward.score import hellinger, score_matrix, calc_score
-from fast_forward.sasa import MoleculeSASA
+from fast_forward.sasa import MoleculeSASA, REFERENCE, surface_statistic
 from fast_forward.report import report_interactions, report_distances, report_sasa
 from collections import defaultdict
 
@@ -74,7 +74,7 @@ def _main():
                         help="Only assess bonded interaction distributions (bonds, angles, dihedrals); skip "
                              "the pairwise distance assessment entirely.")
     parser.add_argument('-sasa', default=False, action='store_true', dest='sasa',
-                        help="Assess the solvent accessible surface area (SASA) of every molecule with fastsasa "
+                        help="Assess the solvent accessible surface area (SASA) of every molecule with sassy "
                              "(Martini bead radii from the bead types) against the reference written by "
                              "'ff_map -sasa' (<prefix><mol>_sasa_distr.dat in the -d directory), and that of every bead "
                              "except dummy beads of type U against the bead references of 'ff_map -sasa' "
@@ -83,10 +83,15 @@ def _main():
                              "with -plots, the distributions are plotted (sasa_distributions.png, "
                              "sasa_bead_distributions_<mol>.png).")
     parser.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
-                        help="With -sasa: write the CG structure and its surface dots (<prefix><mol>_sasa_dots_CG.pdb) "
-                             "to the -dists path (default: current dir), in the frame closest to the mapped structure "
-                             "from 'ff_map -sasa-surface' (<prefix><mol>_sasa_mapped.pdb in the -d directory), "
-                             "superposed onto it; without it, in the frame with median SASA.")
+                        help="With -sasa: write the CG structure and its surface dots (<prefix><mol>_sasa_dots_CG.pdb, "
+                             "the B-factor is the SASA of the bead) to the -dists path (default: current dir), in "
+                             "the frame chosen by -sasa-stat.")
+    parser.add_argument('-sasa-stat', default=REFERENCE, dest='sasa_stat', metavar='STAT',
+                        help="With -sasa-surface: 'reference' uses the frame closest to the mapped structure from "
+                             "'ff_map -sasa-surface' (<prefix><mol>_sasa_mapped.pdb in the -d directory), superposed "
+                             "onto it, or, without a matching one, the frame whose SASA is closest to the mode; any "
+                             "other value uses the molecule and frame whose SASA is closest to this statistic of the "
+                             "SASA distribution: median, mean, mode (most probable SASA), q1, q3 (quartiles), min, max, mean+std, mean-std, or a SASA in nm^2")
 
     args = parser.parse_args()
     # saving the plot data implies making the plots (in the current dir by default)
@@ -94,6 +99,11 @@ def _main():
         args.plots = "."
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
+    if args.sasa_surface:
+        try:
+            args.sasa_stat = surface_statistic(args.sasa_stat, allow_reference=True)
+        except ValueError as err:
+            parser.error(f"-sasa-stat: {err}")
     if args.sasa and not (args.tprfile and args.itp_files):
         parser.error("-sasa requires -s (tpr, for the molecule types) and -i (itp files)")
 
@@ -252,7 +262,8 @@ def _main():
                 sasa_means[molname] = (mol_sasa.series.mean(), ref_mean)
 
                 if args.sasa_surface:
-                    mol_sasa.write_cg_surface(reference_dir=args.reference, outdir=args.distribution_data or ".")
+                    mol_sasa.write_cg_surface(reference_dir=args.reference, outdir=args.distribution_data or ".",
+                                              statistic=args.sasa_stat)
                 if args.plots:
                     sasa_plot_data['sasa'][molname] = {"x": reference_data.T[0],
                                                        "Reference": reference_data.T[1],

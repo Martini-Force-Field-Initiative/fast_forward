@@ -17,7 +17,7 @@ from fast_forward.tests.datafiles import (GSH_AA_TRAJ, GSH_AA_TPR, GSH_MAP, GSH_
                                           GSH_ITP_OUTPUT, GSH_ASSESS_REFERENCE, HAVE_EXAMPLES_DATA,
                                            MISSING_EXAMPLES_DATA_REASON)
 
-pytest.importorskip("fastsasa")
+pytest.importorskip("sassy")
 needs_data = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_DATA_REASON)
 
 from fast_forward.sasa import MoleculeSASA  # noqa: E402
@@ -70,12 +70,53 @@ def test_molecule_sasa_aa(tmp_path):
     assert np.all((series > 3) & (series < 10))
     assert np.allclose(np.loadtxt(tmp_path / "test_GSH_sasa.dat"), series)
     assert np.allclose(np.loadtxt(tmp_path / "test_GSH_sasa_distr.dat"), distr)
-    assert np.allclose(mol_sasa.sasa.molecule_sasa.ravel(), series)
+    assert np.allclose(mol_sasa.sasa.results.body_sasa.ravel(), series)
 
-    # the surface comes from the same SASA: a frame of the type's median SASA
+    # the surface comes from the same SASA: by default a frame of the type's most probable SASA
+    from sassy.statistics import mode
     surface = mol_sasa.write_surface(tmp_path)
     assert (tmp_path / "test_GSH_sasa_dots_AA.pdb").is_file()
-    assert np.isclose(series[surface.frame], np.median(series), atol=0.01)
+    assert np.argmin(np.abs(series - mode(series))) == surface.frame
+    # the B-factor of the atoms and their dots is the SASA of the atom
+    assert "B-factor: SASA of the atom" in (tmp_path / "test_GSH_sasa_dots_AA.pdb").read_text()
+
+    # another statistic
+    surface = mol_sasa.write_surface(tmp_path, statistic="max")
+    assert np.isclose(series[surface.frame], series.max())
+
+
+def test_surface_statistic():
+    from fast_forward.sasa import surface_statistic
+    assert surface_statistic("mode") == "mode"
+    assert surface_statistic("mean+std") == "mean+std"
+    assert surface_statistic("5.5") == 5.5
+    with pytest.raises(ValueError, match="unknown statistic 'average'"):
+        surface_statistic("average")
+    # 'reference' only for ff_assess
+    assert surface_statistic("reference", allow_reference=True) == "reference"
+    with pytest.raises(ValueError, match="unknown statistic 'reference'"):
+        surface_statistic("reference")
+
+
+@pytest.mark.parametrize('tool, stat', [('ff_map', 'average'), ('ff_map', 'reference'), ('ff_assess', 'average')])
+def test_invalid_sasa_stat(tmp_path, tool, stat):
+    cmd = [sys.executable, '-m', f'fast_forward.bin.{tool}', '-f', 'x.xtc', '-s', 'x.tpr',
+           '-sasa', '-sasa-surface', '-sasa-stat', stat]
+    cmd += ['-mols', 'LIG', '-o', 'out.gro'] if tool == 'ff_map' else ['-i', 'x.itp']
+    proc = subprocess.run(cmd, cwd=tmp_path, timeout=60, capture_output=True, text=True, env=ENV)
+    assert proc.returncode == 2
+    assert f"-sasa-stat: unknown statistic '{stat}'" in proc.stderr
+
+
+@needs_data
+def test_cg_surface_statistic(tmp_path):
+    # an explicit statistic ignores the mapped structure
+    u = mda.Universe(str(GSH_ASSESS_TPR), str(GSH_ASSESS_TRAJ))
+    mol_sasa = MoleculeSASA(u.select_atoms("moltype GSH"), "GSH", cg=True)
+    u.atoms[:6].write(str(tmp_path / "GSH_sasa_mapped.pdb"))
+    surface = mol_sasa.write_cg_surface(reference_dir=tmp_path, outdir=tmp_path, statistic="min")
+    assert surface.rmsd is None
+    assert np.isclose(mol_sasa.series[surface.frame], mol_sasa.series.min())
 
 
 @needs_data
@@ -344,7 +385,7 @@ def test_cg_bead_sasa_skip_dummies():
     assert mol_sasa.bead_names == names[:5] # the virtual site (bead 4) is kept
     assert mol_sasa.bead_series.shape == (5, u.trajectory.n_frames)
     assert np.allclose(mol_sasa.bead_series.sum(axis=0), mol_sasa.series) # the dummy has no SASA
-    assert mol_sasa.sasa.sasa is None # the SASA of the atoms is freed
+    assert mol_sasa.sasa.results.atom_sasa is None # the SASA of the atoms is freed
     with pytest.raises(ValueError, match="has 6 beads, but the itp has 5"):
         block.remove_node(list(block.nodes)[-1])
         MoleculeSASA(atoms, "GSH", cg=True).cg_bead_sasa(block)

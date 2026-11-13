@@ -28,7 +28,7 @@ from fast_forward.mapping import create_new_universe, forward_map_positions, for
 from fast_forward.universe_handler import UniverseHandler
 from fast_forward.map_file_parers import read_mapping
 from fast_forward.cgsmiles import cgsmiles_to_mapping, load_cgsmiles_library
-from fast_forward.sasa import MoleculeSASA
+from fast_forward.sasa import MoleculeSASA, FALLBACK_STATISTIC, surface_statistic
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
@@ -118,7 +118,7 @@ def main():
     sasa_group = parser.add_argument_group('SASA Options')
     sasa_group.add_argument('-sasa', default=None, const=".", nargs="?", dest="sasa",
                             help="Calculate the solvent accessible surface area (SASA) of every molecule of the "
-                                 "atomistic trajectory with fastsasa, and save its time series and distribution "
+                                 "atomistic trajectory with sassy, and save its time series and distribution "
                                  "(<prefix><mol>_sasa[_distr].dat, <mol>: the CG molecule name given with -mols AA:CG) "
                                  "as reference for 'ff_assess -sasa', and that of every bead of the mapping "
                                  "(<prefix><mol>_<resid>_<bead>_sasa[_distr].dat): the SASA of every atom goes to its "
@@ -127,16 +127,26 @@ def main():
                                  "provide a path (default: current dir); use the same directory as for "
                                  "'ff_inter -dists'.")
     sasa_group.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
-                            help="With -sasa: write the atomistic structure and its surface dots of a molecule and "
-                                 "frame with median SASA (<prefix><mol>_sasa_dots_AA.pdb), and the mapped structure of "
-                                 "the same molecule and frame (<prefix><mol>_sasa_mapped.pdb) to the -sasa path. "
+                            help="With -sasa: write the atomistic structure and its surface dots of a "
+                                 "representative molecule and frame (SASA closest to -sasa-stat; "
+                                 "<prefix><mol>_sasa_dots_AA.pdb, the B-factor is the SASA of the atom), "
+                                 "and the mapped structure of the same molecule and frame "
+                                 "(<prefix><mol>_sasa_mapped.pdb) to the -sasa path. "
                                  "'ff_assess -sasa-surface' uses the mapped structure to pick a matching CG frame.")
+    sasa_group.add_argument('-sasa-stat', default=FALLBACK_STATISTIC, dest='sasa_stat', metavar='STAT',
+                            help="With -sasa-surface: use the molecule and frame whose SASA is closest to this "
+                                 "statistic of the SASA distribution: median, mean, mode (most probable SASA), q1, q3 (quartiles), min, max, mean+std, mean-std, or a SASA in nm^2")
     sasa_group.add_argument('-pref', type=str, dest="prefix", default="",
                             help="common prefix of the SASA file names")
 
     args = parser.parse_args()
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
+    if args.sasa_surface:
+        try:
+            args.sasa_stat = surface_statistic(args.sasa_stat)
+        except ValueError as err:
+            parser.error(f"-sasa-stat: {err}")
 
     try:
         args.mol_names, cg_names = parse_mol_names(args.mol_names)
@@ -251,7 +261,7 @@ def main():
             print(f"INFO - SASA of {mol_name}: {mol_sasa.series.mean():.3f} ± {mol_sasa.series.std():.3f} nm^2")
             if args.sasa_surface:
                 # AA surface of a representative frame and the mapped structure of that frame
-                surface = mol_sasa.write_surface(args.sasa)
+                surface = mol_sasa.write_surface(args.sasa, statistic=args.sasa_stat)
                 mol_sasa.write_mapped_structure(surface, cg_universe, mapped_atoms, outdir=args.sasa)
 
     # write coordinate
