@@ -18,6 +18,7 @@ def mass_redistribution(block, pair_idx):
     for pairs in pair_idx:
         vs = pairs[0]
         block.nodes[vs]['mass'] = 0.0
+        block.nodes[vs]['charge'] = block.nodes[vs].get('charge', '0.0')
         vs_type_mass = MARTINI_MASS.get(block.nodes[vs]["atype"][0], 72)
         redistribution = vs_type_mass / len(pairs[1:])
 
