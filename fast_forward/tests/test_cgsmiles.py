@@ -17,12 +17,14 @@ Unit tests for the cgsmiles module.
 from types import SimpleNamespace
 
 import networkx as nx
+import numpy as np
 import pysmiles
 import pytest
 from cgsmiles.resolve import MoleculeResolver
 
-from fast_forward.cgsmiles import (_annotate_vs, _collect_bead_data,
-                                   _resolve_cg_match, cgsmiles_to_mapping)
+from fast_forward.cgsmiles import (_annotate_vs, _collect_bead_data, _copy_offsets,
+                                   _first_atom_by_molnum, _resolve_cg_match,
+                                   cgsmiles_to_mapping)
 from fast_forward.universe_handler import ResidueIter
 
 # methyl-capped PEO: CH3ter-(EO)n-CH3ter, residue level on top
@@ -178,9 +180,73 @@ def test_collect_bead_data_residue_per_copy(cgs_str, resids):
         cg.nodes[bead].setdefault("resid", 1)
         cg.nodes[bead].setdefault("resname", "MOL")
     res_iter = ResidueIter()
-    _, _, _, n_beads, res_iter = _collect_bead_data(cg, match, [0, 1, 2], mol, 0, res_iter)
+    offsets = [0, len(mol), 2 * len(mol)]
+    _, _, _, n_beads, res_iter = _collect_bead_data(cg, match, offsets, 0, res_iter)
     assert n_beads == 3 * len(cg)
     assert [res.resid for res in res_iter.res_iter()] == resids * 3
+
+
+class _Atoms(list):
+    """List of atoms with a molnums array, like an MDAnalysis AtomGroup."""
+    def __init__(self, atoms, molnums):
+        super().__init__(atoms)
+        self.molnums = np.array(molnums)
+
+
+def _fake_universe(layout):
+    """
+    Minimal stand-in for UniverseHandler with molecules in topology order.
+
+    layout: list of (molname, all-atom graph). As in UniverseHandler, each
+    molecule graph carries the global atom indices of the first copy.
+    """
+    atoms, molnums, mol_idxs_by_name, molecule_graphs = [], [], {}, {}
+    for molnum, (mol_name, graph) in enumerate(layout):
+        start = len(atoms)
+        mol_idxs_by_name.setdefault(mol_name, []).append(molnum)
+        if mol_name not in molecule_graphs:
+            molecule_graphs[mol_name] = nx.convert_node_labels_to_integers(
+                graph, first_label=start)
+        atoms.extend(SimpleNamespace(name=f"{mol_name}{molnum}_{i}") for i in range(len(graph)))
+        molnums.extend([molnum] * len(graph))
+    return SimpleNamespace(molecule_graphs=molecule_graphs,
+                           mol_idxs_by_name=mol_idxs_by_name,
+                           atoms=_Atoms(atoms, molnums))
+
+
+ETH_CGS = "{[#C][#EC][#C]}.{#EC=[$]COC[$],#C=[$]C}"
+PEO2_CGS = "{[#C][#EC]|2[#C]}.{#EC=[$]COC[$],#C=[$]C}"
+
+
+def test_copy_offsets_follow_first_atom():
+    univ = _fake_universe([("A", _capped_peo(1)), ("B", _capped_peo(2)),
+                           ("A", _capped_peo(1))])
+    first_atom = _first_atom_by_molnum(univ)
+    n_a, n_b = len(_capped_peo(1)), len(_capped_peo(2))
+    assert first_atom == {0: 0, 1: n_a, 2: n_a + n_b}
+    assert _copy_offsets(first_atom, [0, 2]) == [0, n_a + n_b]
+    assert _copy_offsets(first_atom, [1]) == [0]
+
+
+def test_interleaved_molecules_map_their_own_atoms():
+    """
+    Copies of a molecule type that are not next to each other in the
+    topology (ETH PEO ETH) map onto their own atoms.
+    """
+    layout = [("ETH", _capped_peo(1)), ("PEO", _capped_peo(2)), ("ETH", _capped_peo(1))]
+    univ = _fake_universe(layout)
+    mapped_atoms, bead_idxs, _, _, res_iter = cgsmiles_to_mapping(
+        univ, [ETH_CGS, PEO2_CGS], ["ETH", "PEO"])
+
+    # atoms of each molecule in the topology
+    molnums = univ.atoms.molnums
+    atoms_of = [set(np.flatnonzero(molnums == m).tolist()) for m in range(len(layout))]
+    # beads come per molecule type: ETH copy 1, ETH copy 2, then PEO
+    beads_per_copy = [list(mapped_atoms[0:3]), list(mapped_atoms[3:6]), list(mapped_atoms[6:10])]
+    for molnum, beads in zip([0, 2, 1], beads_per_copy):
+        mapped = set().union(*(set(bead) for bead in beads))
+        assert mapped == atoms_of[molnum]
+    assert len(bead_idxs) == 10
 
 
 def test_two_level_resname_is_molecule_name():
@@ -188,12 +254,8 @@ def test_two_level_resname_is_molecule_name():
     Without a residue level, each molecule type gets its own resname, so
     mappings of different molecules are not merged.
     """
-    ether, peo = _capped_peo(1), _capped_peo(2)
-    univ = SimpleNamespace(
-        molecule_graphs={"ETH": ether, "PEO": peo},
-        mol_idxs_by_name={"ETH": [0, 1], "PEO": [2]},
-        atoms=[SimpleNamespace(name=f"A{i}") for i in range(len(peo))],
-    )
+    univ = _fake_universe([("ETH", _capped_peo(1)), ("ETH", _capped_peo(1)),
+                           ("PEO", _capped_peo(2))])
     cgs_strs = ["{[#C][#EC][#C]}.{#EC=[$]COC[$],#C=[$]C}",
                 "{[#C][#EC]|2[#C]}.{#EC=[$]COC[$],#C=[$]C}"]
     _, bead_idxs, mappings, _, res_iter = cgsmiles_to_mapping(
@@ -289,7 +351,7 @@ def test_collect_bead_data_rejects_split_residues():
     cg, _, match = _resolve_cg_match(PEO_3LEVEL.format(n=1), _capped_peo(1))
     cg.nodes[2]["resid"] = cg.nodes[0]["resid"]
     with pytest.raises(ValueError, match="not contiguous"):
-        _collect_bead_data(cg, match, [0], _capped_peo(1), 0, ResidueIter())
+        _collect_bead_data(cg, match, [0], 0, ResidueIter())
 
 
 def test_resolve_two_level_unchanged():

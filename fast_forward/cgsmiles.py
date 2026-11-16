@@ -352,7 +352,34 @@ def _resolve_cg_match(cgs_str, mol_graph):
     return cg, aa, match
 
 
-def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
+def _first_atom_by_molnum(univ):
+    """
+    Returns a dict mapping each molecule number to the index of its first atom.
+    """
+    molnums, first_atoms = np.unique(np.asarray(univ.atoms.molnums), return_index=True)
+    return dict(zip(molnums.tolist(), first_atoms.tolist()))
+
+
+def _copy_offsets(first_atom, mol_idxs):
+    """
+    Atom index shift of each copy of a molecule relative to its first copy.
+
+    Parameters
+    ----------
+    first_atom: dict[int, int]
+        Index of the first atom of each molecule number.
+    mol_idxs: list[int]
+        Molecule numbers of all copies of one molecule type.
+
+    Returns
+    -------
+    list[int]
+    """
+    base = first_atom[mol_idxs[0]]
+    return [first_atom[mol_idx] - base for mol_idx in mol_idxs]
+
+
+def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
     """
     Iterates over all molecule instances and collects per-bead mapped atoms,
     weights, and bead indices.
@@ -361,10 +388,10 @@ def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
     ----------
     cg: networkx.Graph
     match: dict
-        Mapping from CG atom indices to all-atom indices (for one molecule instance).
-    mol_idxs: list[int]
-        Indices of all instances of this molecule in the universe.
-    mol_graph: networkx.Graph
+        Mapping from CG atom indices to all-atom indices (for the first
+        molecule instance).
+    offsets: list[int]
+        Atom index shift of each molecule.
     bead_count: int
         Running bead index to continue from.
     res_iter: ResidueIter
@@ -390,9 +417,8 @@ def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
             prev_resid = resid
 
     mapped_atoms, weights, bead_idxs = [], [], []
-    offset = 0
 
-    for _ in mol_idxs:
+    for offset in offsets:
         prev_resid = None
         for bead in cg.nodes:
             resid = cg.nodes[bead]['resid']
@@ -411,8 +437,6 @@ def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
             )
             bead_idxs.append(bead_count)
             bead_count += 1
-
-        offset += len(mol_graph)
 
     return mapped_atoms, weights, bead_idxs, bead_count, res_iter
 
@@ -439,6 +463,7 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     mappings = {}
     bead_count = 0
     res_iter = ResidueIter()
+    first_atom = _first_atom_by_molnum(univ)
 
     for idx, mol_name in enumerate(mol_names):
         mol_graph = univ.molecule_graphs[mol_name]
@@ -458,9 +483,9 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
 
         # without a residue level, name the residue after the molecule
         mappings = get_mappings(cg, univ, match, mappings, resname_default=mol_name)
-        mol_idxs = univ.mol_idxs_by_name[mol_name]
+        offsets = _copy_offsets(first_atom, univ.mol_idxs_by_name[mol_name])
         mapped_atoms, weights, bead_idxs, bead_count, res_iter = _collect_bead_data(
-            cg, match, mol_idxs, mol_graph, bead_count, res_iter
+            cg, match, offsets, bead_count, res_iter
         )
         all_mapped_atoms.extend(mapped_atoms)
         all_weights.extend(weights)
