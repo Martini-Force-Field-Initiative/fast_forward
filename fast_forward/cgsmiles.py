@@ -340,10 +340,10 @@ def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
             prev_resid = resid
 
     mapped_atoms, weights, bead_idxs = [], [], []
-    prev_resid = -1
     offset = 0
 
     for _ in mol_idxs:
+        prev_resid = None
         for bead in cg.nodes:
             resid = cg.nodes[bead]['resid']
             resname = cg.nodes[bead]['resname']
