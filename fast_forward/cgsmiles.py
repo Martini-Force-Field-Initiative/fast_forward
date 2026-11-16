@@ -175,6 +175,41 @@ def get_mappings(cg, univ, _match, mappings, resname_default="RES"):
     return mappings
 
 
+def _parse_wvs(bead_graph, atom):
+    """
+    Returns the ``wVS`` annotation of an atom as float, or None if it has none.
+    """
+    value = bead_graph.nodes[atom].get('wVS')
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"wVS='{value}' of atom {bead_graph.nodes[atom].get('element')} "
+                         "is not a number.") from None
+
+
+def _vs_weight(bead_graph, atom):
+    """
+    Weight of an atom of a parent bead when it is used for a virtual site.
+
+    Mirrors how cgsmiles treats w: the atom's own w if given;
+    for a hydrogen without one, the wVS of the heavy atom it is bonded
+    to; otherwise the atom's normal mapping weight (w, default 1).
+    """
+    wvs = _parse_wvs(bead_graph, atom)
+    
+    if wvs is None and bead_graph.nodes[atom].get('element') == 'H':
+        for anchor in bead_graph.neighbors(atom):
+            if bead_graph.nodes[anchor].get('element') != 'H':
+                wvs = _parse_wvs(bead_graph, anchor)
+                break
+   
+    if wvs is None:
+        return bead_graph.nodes[atom].get('weight', 1.0)
+    return wvs
+
+
 def _annotate_vs(cg_graph):
     """
     Identifies virtual sites in the CG graph and annotates them.
@@ -184,10 +219,13 @@ def _annotate_vs(cg_graph):
     graphs of neighboring atoms, which is equivalent to a virtual_sitesn
     mapping.
 
-    The atoms keep their attributes and their mapping weight. An atom that
-    is shared between several neighboring beads (e.g. ``w=0.5`` in two
-    beads) gets the sum of its weights, so it counts as much as an atom
-    that belongs to one bead.
+    The atoms keep their attributes. Their weight for the virtual site is
+    the wVS atom annotation if given (e.g. [C;w=1;wVS=0]), which
+    hydrogens inherit from their heavy atom just like w; otherwise it
+    is the normal mapping weight.
+    An atom that is shared between several neighboring beads (e.g. ``w=0.5``
+    in two beads) gets the sum of its weights, so it counts as much as an
+    atom that belongs to one bead.
 
     Parameters
     ----------
@@ -198,8 +236,9 @@ def _annotate_vs(cg_graph):
         if len(cg_graph.nodes[node].get('graph', [])) == 0:
             g = nx.Graph()
             for neigh in cg_graph.neighbors(node):
-                for atom, data in cg_graph.nodes[neigh]['graph'].nodes(data=True):
-                    weight = data.get('weight', 1.0)
+                bead_graph = cg_graph.nodes[neigh]['graph']
+                for atom, data in bead_graph.nodes(data=True):
+                    weight = _vs_weight(bead_graph, atom)
                     if atom in g:
                         g.nodes[atom]['weight'] += weight
                     else:
