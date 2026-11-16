@@ -184,6 +184,11 @@ def _annotate_vs(cg_graph):
     graphs of neighboring atoms, which is equivalent to a virtual_sitesn
     mapping.
 
+    The atoms keep their attributes and their mapping weight. An atom that
+    is shared between several neighboring beads (e.g. ``w=0.5`` in two
+    beads) gets the sum of its weights, so it counts as much as an atom
+    that belongs to one bead.
+
     Parameters
     ----------
     cg_graph: networkx.Graph
@@ -193,7 +198,12 @@ def _annotate_vs(cg_graph):
         if len(cg_graph.nodes[node].get('graph', [])) == 0:
             g = nx.Graph()
             for neigh in cg_graph.neighbors(node):
-                g.add_nodes_from(list(cg_graph.nodes[neigh]['graph'].nodes))
+                for atom, data in cg_graph.nodes[neigh]['graph'].nodes(data=True):
+                    weight = data.get('weight', 1.0)
+                    if atom in g:
+                        g.nodes[atom]['weight'] += weight
+                    else:
+                        g.add_node(atom, **{**data, 'weight': weight})
             cg_graph.nodes[node]['graph'] = g
 
 
