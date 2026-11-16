@@ -217,6 +217,53 @@ def _annotate_residues(cg, res):
             cg.nodes[cgnode]["resid"] = resid
 
 
+def _order_by_bead_index(cg):
+    """
+    Returns a copy of the CG graph whose nodes are relabeled 0..N-1 in the
+    order given by the bead annotation index (e.g. [#A;index=2]).
+
+    The index is a sort key, not a position: beads are sorted by it, and
+    beads with equal index keep their order from the cgsmiles string.
+    As in python indexing, negative indices count from the end.
+    If the beads carry a residue annotation (3-level strings), sorting
+    happens within each residue, so the beads of a residue stay contiguous.
+    """
+    
+    raw = {node: cg.nodes[node].get('index') for node in cg.nodes}
+    missing = [cg.nodes[node]['fragname'] for node, val in raw.items() if val is None]
+    if len(missing) == len(raw): # no beads have an index
+        return cg
+    if missing: # some beads have no index
+        print(f"WARNING - {len(missing)} of {len(raw)} beads have no 'index' annotation "
+              f"(bead types {sorted(set(missing))}); using index 0 for them.")
+    indices = {}
+    for node, val in raw.items():
+        if val is None: # default to 0
+            indices[node] = 0
+            continue
+        try:
+            indices[node] = int(val)
+        except (TypeError, ValueError):
+            raise ValueError(f"Bead index '{val}' of bead {cg.nodes[node]['fragname']} "
+                             "is not an integer.") from None
+
+    # residues in order of first appearance; all 0 without a residue level
+    residue_rank = {}
+    for node in cg.nodes:
+        residue_rank.setdefault(cg.nodes[node].get('resid'), len(residue_rank))
+
+	# create a new graph with reordered nodes
+    order = sorted(cg.nodes, key=lambda node: (residue_rank[cg.nodes[node].get('resid')],
+                                               indices[node] < 0, #puts negative indices after all non-negative ones
+                                               indices[node]))
+    relabel = {old: new for new, old in enumerate(order)}
+    ordered = nx.Graph(**cg.graph)
+    ordered.add_nodes_from((relabel[node], cg.nodes[node]) for node in order)
+    ordered.add_edges_from((relabel[u], relabel[v], data)
+                           for u, v, data in cg.edges(data=True))
+    return ordered
+
+
 def _resolve_cg_match(cgs_str, mol_graph):
     """
     Resolves a cgsmiles string and returns the matched (cg, aa, match) triple,
@@ -247,7 +294,12 @@ def _resolve_cg_match(cgs_str, mol_graph):
 
     _annotate_vs(cg)
     match = find_one_graph_match(aa, mol_graph)
-    return (cg, aa, match) if match else None
+    if not match:
+        return None
+    # reorder last: residue annotation relies on the original node labels.
+    # Only after a match, so non-matching candidate strings are not validated.
+    cg = _order_by_bead_index(cg)
+    return cg, aa, match
 
 
 def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
@@ -272,6 +324,21 @@ def _collect_bead_data(cg, match, mol_idxs, mol_graph, bead_count, res_iter):
     tuple[list, list, list, int, ResidueIter]
         mapped_atoms, weights, bead_idxs, updated bead_count, res_iter
     """
+    
+	# check if the beads of each residue are contiguous; if not, raise an error
+    seen_resids = set()
+    prev_resid = None
+    for bead in cg.nodes:
+        resid = cg.nodes[bead]['resid']
+        if resid != prev_resid:
+            if resid in seen_resids:
+                raise ValueError(
+                    f"The beads of residue {cg.nodes[bead]['resname']} {resid} are "
+                    "not contiguous; check the bead 'index' annotations."
+                )
+            seen_resids.add(resid)
+            prev_resid = resid
+
     mapped_atoms, weights, bead_idxs = [], [], []
     prev_resid = -1
     offset = 0
