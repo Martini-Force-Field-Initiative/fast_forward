@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pbr.version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = pbr.version.VersionInfo('fast_forward').release_string()
+try:
+    __version__ = version('fast_forward')
+except PackageNotFoundError:
+    __version__ = '0+unknown'
 
 # Find the data directory once.
 try:
@@ -32,7 +35,6 @@ else:
     DATA_PATH = file_manager.enter_context(as_file(ref))
     del files, as_file, atexit, ExitStack
 
-del pbr
 
 # import numba if available
 import functools
