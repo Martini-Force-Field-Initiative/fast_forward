@@ -116,7 +116,7 @@ def _most_common(_list):
     return max(set(_list), key=_list.count)
 
 
-def get_mappings(cg, univ, _match, mappings):
+def get_mappings(cg, univ, _match, mappings, resname_default="RES"):
     """
     Assigns each coarse CG node a resname and resid based on the all-atom
     universe. If a bead is split between residues, the resname and resid of
@@ -132,6 +132,10 @@ def get_mappings(cg, univ, _match, mappings):
         A dict mapping the coarse atoms to fine-grained atoms.
     mappings: dict[:class:`fast_forward.map_file_parser.Mapping`]
         A dict of mapping objects.
+    resname_default: str
+        Resname for beads without a residue annotation (strings without a
+        residue level). Must be unique per molecule type, otherwise the
+        mappings of different molecules are merged under one resname.
 
     Returns
     -------
@@ -141,9 +145,6 @@ def get_mappings(cg, univ, _match, mappings):
     target_resids = {}
     for bead in cg.nodes:
         atoms = cg.nodes[bead]['graph'].nodes
-        # if no resname mapping is provided everything is defaulted
-        # to RES
-        resname_default = "RES"
         # we cannot simply take the resids provided in the input
         # because we allow mapping across residues in which case
         # there is no unique resid and the most common one is not
@@ -406,7 +407,8 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
             )
         cg, aa, match = resolved
 
-        mappings = get_mappings(cg, univ, match, mappings)
+        # without a residue level, name the residue after the molecule
+        mappings = get_mappings(cg, univ, match, mappings, resname_default=mol_name)
         mol_idxs = univ.mol_idxs_by_name[mol_name]
         mapped_atoms, weights, bead_idxs, bead_count, res_iter = _collect_bead_data(
             cg, match, mol_idxs, mol_graph, bead_count, res_iter
