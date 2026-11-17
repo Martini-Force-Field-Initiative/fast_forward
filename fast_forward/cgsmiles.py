@@ -14,7 +14,6 @@
 import numpy as np
 import numba
 import networkx as nx
-import pysmiles
 from cgsmiles.resolve import MoleculeResolver
 from .map_file_parers import Mapping
 from .universe_handler import ResidueIter
@@ -65,9 +64,10 @@ def load_cgsmiles_library(filepath):
 def find_one_graph_match(graph1, graph2):
     """
     Returns one match when the graphs are isomorphic, otherwise [].
-    The heavy-atom graphs are matched with VF2 (networkx GraphMatcher
+    The heavy-atom graphs are matched with VF2 (networkx GraphMatcher),
     comparing only the element and hcount of each node.
-    Hydrogens are then assigned to the hydrogens of the matched heavy atom (in arbitrary order).
+    Hydrogens are then assigned to the hydrogens of the matched heavy atom
+    (in arbitrary order).
 
     Parameters
     ----------
@@ -121,15 +121,15 @@ def find_one_graph_match(graph1, graph2):
     return mapping
 
 
-def _most_common(_list):
-    return max(set(_list), key=_list.count)
-
-
 def get_mappings(cg, univ, _match, mappings, resname_default="RES"):
     """
-    Assigns each coarse CG node a resname and resid based on the all-atom
-    universe. If a bead is split between residues, the resname and resid of
-    the majority of atoms is used.
+    Builds the mapping objects of a matched molecule and sets each CG node's
+    resname and resid.
+
+    Resname and resid come from the cgsmiles residue level (set by
+    _annotate_residues); beads without one get resname_default and resid 1.
+    Each resname gets one Mapping, filled from the first residue with that
+    name; the beads are named fragname + bead index.
 
     Parameters
     ----------
@@ -327,7 +327,7 @@ def _order_by_bead_index(cg):
     for node in cg.nodes:
         residue_rank.setdefault(cg.nodes[node].get('resid'), len(residue_rank))
 
-	# create a new graph with reordered nodes
+    # create a new graph with reordered nodes
     order = sorted(cg.nodes, key=lambda node: (residue_rank[cg.nodes[node].get('resid')],
                                                indices[node] < 0, #puts negative indices after all non-negative ones
                                                indices[node]))
@@ -501,12 +501,22 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     cgsmiles_strs: list[str]
     mol_names: list[str]
     mol_matching: bool
-        If False, the order of cgsmiles strings is assumed to match the order
-        of molecules.
+        If True, the cgsmiles strings are in the same order as mol_names
+        (one string per molecule type). If False, every molecule is matched
+        against all strings and the first matching string is used.
 
     Returns
     -------
-    list, list, dict
+    mapped_atoms: numba.typed.List
+        Per bead, the indices of its atoms in the universe.
+    bead_idxs: numba.typed.List
+        Index of each bead in the CG system.
+    mappings: dict[:class:`fast_forward.map_file_parers.Mapping`]
+        Mapping objects by resname; used for the bead names.
+    weights: numba.typed.List
+        Per bead, the weight of each of its atoms.
+    res_iter: :class:`fast_forward.universe_handler.ResidueIter`
+        The CG residues in topology order.
     """
     if mol_matching and len(cgsmiles_strs) != len(mol_names):
         raise ValueError(
