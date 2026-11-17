@@ -218,8 +218,8 @@ def _annotate_vs(cg_graph):
 
     If a node in cg_graph has no mapped atom positions, it is treated as a
     virtual site. Its mapped position is composed as the union of fragment
-    graphs of neighboring atoms, which is equivalent to a virtual_sitesn
-    mapping.
+    graphs of its neighboring beads, which is equivalent to a virtual_sitesn
+    mapping. Neighboring virtual sites are not parents and are ignored.
 
     The atoms keep their attributes. Their weight for the virtual site is
     the wVS atom annotation if given (e.g. [C;w=1;wVS=0]), which
@@ -233,19 +233,33 @@ def _annotate_vs(cg_graph):
     ----------
     cg_graph: networkx.Graph
         The graph describing a coarse molecule.
+
+    Raises
+    ------
+    ValueError
+        If a virtual site has no neighboring bead with atoms.
     """
-    for node in cg_graph.nodes:
-        if len(cg_graph.nodes[node].get('graph', [])) == 0:
-            g = nx.Graph()
-            for neigh in cg_graph.neighbors(node):
-                bead_graph = cg_graph.nodes[neigh]['graph']
-                for atom, data in bead_graph.nodes(data=True):
-                    weight = _vs_weight(bead_graph, atom)
-                    if atom in g:
-                        g.nodes[atom]['weight'] += weight
-                    else:
-                        g.add_node(atom, **{**data, 'weight': weight})
-            cg_graph.nodes[node]['graph'] = g
+    # identify all virtual sites first, so that neighboring virtual sites are
+    # never used as parents, whatever order the nodes are processed in
+    vs_nodes = {node for node in cg_graph.nodes
+                if len(cg_graph.nodes[node].get('graph', [])) == 0}
+    for node in vs_nodes:
+        parents = [neigh for neigh in cg_graph.neighbors(node) if neigh not in vs_nodes]
+        if not parents:
+            raise ValueError(
+                f"Virtual site {cg_graph.nodes[node].get('fragname')} (bead {node}) "
+                "is not bonded to any bead with atoms, so its position is undefined."
+            )
+        g = nx.Graph()
+        for neigh in parents:
+            bead_graph = cg_graph.nodes[neigh]['graph']
+            for atom, data in bead_graph.nodes(data=True):
+                weight = _vs_weight(bead_graph, atom)
+                if atom in g:
+                    g.nodes[atom]['weight'] += weight
+                else:
+                    g.add_node(atom, **{**data, 'weight': weight})
+        cg_graph.nodes[node]['graph'] = g
 
 
 def _annotate_residues(cg, res):
