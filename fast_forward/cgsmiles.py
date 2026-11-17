@@ -121,13 +121,12 @@ def find_one_graph_match(graph1, graph2):
     return mapping
 
 
-def get_mappings(cg, univ, _match, mappings, resname_default="RES"):
+def get_mappings(cg, univ, _match, mappings):
     """
-    Builds the mapping objects of a matched molecule and sets each CG node's
-    resname and resid.
+    Builds the mapping objects of a matched molecule. The CG graph is not
+    changed.
 
-    Resname and resid come from the cgsmiles residue level (set by
-    _annotate_residues); beads without one get resname_default and resid 1.
+    Every CG node must have a resname and resid (set by _resolve_cg_match).
     Each resname gets one Mapping, filled from the first residue with that
     name; the beads are named fragname + bead index.
 
@@ -141,10 +140,6 @@ def get_mappings(cg, univ, _match, mappings, resname_default="RES"):
         A dict mapping the coarse atoms to fine-grained atoms.
     mappings: dict[:class:`fast_forward.map_file_parser.Mapping`]
         A dict of mapping objects.
-    resname_default: str
-        Resname for beads without a residue annotation (strings without a
-        residue level). Must be unique per molecule type, otherwise the
-        mappings of different molecules are merged under one resname.
 
     Returns
     -------
@@ -154,15 +149,10 @@ def get_mappings(cg, univ, _match, mappings, resname_default="RES"):
     target_resids = {}
     for bead in cg.nodes:
         atoms = cg.nodes[bead]['graph'].nodes
-        # we cannot simply take the resids provided in the input
-        # because we allow mapping across residues in which case
-        # there is no unique resid and the most common one is not
-        # safe enough
-        resid_default = 1 
-        resname = cg.nodes[bead].get('resname', resname_default)
-        resid = cg.nodes[bead].get('resid', resid_default)
-        cg.nodes[bead]['resid'] = resid
-        cg.nodes[bead]['resname'] = resname
+        # resids come from the cgsmiles string, not the topology: a bead can
+        # span several topology residues, so it has no unique topology resid
+        resname = cg.nodes[bead]['resname']
+        resid = cg.nodes[bead]['resid']
         mapping = mappings.get(resname, Mapping(resname, resname))
         target_resid = target_resids.get(resname, resid)
         target_resids[resname] = target_resid
@@ -339,10 +329,14 @@ def _order_by_bead_index(cg):
     return ordered
 
 
-def _resolve_cg_match(cgs_str, mol_graph):
+def _resolve_cg_match(cgs_str, mol_graph, resname_default="RES"):
     """
     Resolves a cgsmiles string and returns the matched (cg, aa, match) triple,
     or None if the string does not match mol_graph.
+
+    Every node of the returned CG graph has a resname and resid: from the
+    residue level for strings with three or more levels; otherwise the whole
+    molecule is one residue named resname_default with resid 1.
 
     Parameters
     ----------
@@ -350,6 +344,10 @@ def _resolve_cg_match(cgs_str, mol_graph):
         A cgsmiles string encoding the CG mapping.
     mol_graph: networkx.Graph
         The all-atom molecule graph to match against.
+    resname_default: str
+        Resname for strings without a residue level. Should be unique per
+        molecule type (e.g. the molecule name), otherwise the mappings of
+        different molecules are merged under one resname.
 
     Returns
     -------
@@ -368,6 +366,11 @@ def _resolve_cg_match(cgs_str, mol_graph):
 
     if len(metas) > 1:
         _annotate_residues(cg, metas[-2])
+    else:
+        # no residue level: the whole molecule is one residue
+        for node in cg.nodes:
+            cg.nodes[node]["resname"] = resname_default
+            cg.nodes[node]["resid"] = 1
 
     _annotate_vs(cg)
     match = find_one_graph_match(aa, mol_graph)
@@ -542,7 +545,8 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
         # Find the first cgsmiles string that matches this molecule
         resolved = None
         for cgs_str in candidates:
-            resolved = _resolve_cg_match(cgs_str, mol_graph)
+            # without a residue level, name the residue after the molecule
+            resolved = _resolve_cg_match(cgs_str, mol_graph, resname_default=mol_name)
             if resolved is not None:
                 break
         if resolved is None:
@@ -551,8 +555,7 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
             )
         cg, aa, match = resolved
 
-        # without a residue level, name the residue after the molecule
-        mappings = get_mappings(cg, univ, match, mappings, resname_default=mol_name)
+        mappings = get_mappings(cg, univ, match, mappings)
         _check_contiguous_residues(cg)
         _check_bead_weights(cg, mol_name)
         resolved_by_name[mol_name] = (cg, match)
