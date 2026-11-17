@@ -57,9 +57,10 @@ def load_cgsmiles_library(filepath):
 
 def find_one_graph_match(graph1, graph2):
     """
-    Returns one ISMAGS match when graphs are isomorphic, otherwise [].
-    Matches are done based on element and bond order, which is sufficient
-    to also account for charges implicitly via the orders.
+    Returns one match when the graphs are isomorphic, otherwise [].
+    The heavy-atom graphs are matched with VF2 (networkx GraphMatcher
+    comparing only the element and hcount of each node.
+    Hydrogens are then assigned to the hydrogens of the matched heavy atom (in arbitrary order).
 
     Parameters
     ----------
@@ -68,7 +69,8 @@ def find_one_graph_match(graph1, graph2):
 
     Returns
     -------
-    abc.Iterator
+    dict or list
+        Mapping from graph1 nodes to graph2 nodes, or [] if there is no match.
     """
 
     def node_match(n1, n2):
@@ -480,7 +482,7 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
             if resolved is not None:
                 break
         if resolved is None:
-            raise SyntaxError(
+            raise ValueError(
                 f'No matching cgsmiles string found for molecule {mol_name}.'
             )
         cg, aa, match = resolved
