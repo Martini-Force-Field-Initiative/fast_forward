@@ -255,13 +255,15 @@ def _annotate_residues(cg, res):
     cg: networkx.Graph
         The coarse-grained molecule graph whose nodes will be annotated.
     res: networkx.Graph
-        The residue-level graph produced by an extra resolver pass.
+        The residue-level graph, i.e. the level directly above the CG level.
+        The 'graph' attribute of each node holds its CG nodes.
     """
     for node in res:
         resname = res.nodes[node]["fragname"]
-        # the residue level is the top of the hierarchy, so its nodes carry
-        # no fragid; they are numbered in sequence order, which gives the resid
-        resid = res.nodes[node].get("fragid", node + 1)
+        # residue nodes are numbered in sequence order, which gives the resid.
+        # Their fragid cannot be used: the top level has none, and on lower
+        # levels it is the id of the parent fragment, shared by its children.
+        resid = node + 1
         for cgnode in res.nodes[node]['graph'].nodes:
             cg.nodes[cgnode]["resname"] = resname
             cg.nodes[cgnode]["resid"] = resid
@@ -331,16 +333,18 @@ def _resolve_cg_match(cgs_str, mol_graph):
     tuple[networkx.Graph, networkx.Graph, dict] or None
     """
     resolver = MoleculeResolver.from_string(cgs_str, last_all_atom=True)
-    nres = cgs_str.count("{")
-    assert nres > 1, "cgsmiles string must contain at least two resolution levels."
+    if resolver.resolutions < 1:
+        raise ValueError("cgsmiles string must contain at least two resolution "
+                         f"levels: {cgs_str}")
 
-    if nres > 2:
-        res, _ = resolver.resolve()
+    # each resolve() step returns (level k, level k+1); the last step is
+    # (CG, all-atom). With more than two levels, the level directly above
+    # the CG level holds the residues; levels further up only group them.
+    metas = [meta for meta, _ in resolver.resolve_iter()]
+    cg, aa = resolver.meta_graph, resolver.molecule
 
-    cg, aa = resolver.resolve()
-
-    if nres > 2:
-        _annotate_residues(cg, res)
+    if len(metas) > 1:
+        _annotate_residues(cg, metas[-2])
 
     _annotate_vs(cg)
     match = find_one_graph_match(aa, mol_graph)
