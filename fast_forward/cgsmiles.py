@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections import Counter
 import numpy as np
 import numba
 import networkx as nx
@@ -492,6 +493,113 @@ def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
     return mapped_atoms, weights, bead_idxs, bead_count, res_iter
 
 
+def _resolve_all_atom(cgs_str):
+    """Returns the all-atom graph of a cgsmiles string."""
+    resolver = MoleculeResolver.from_string(cgs_str, last_all_atom=True)
+    for _ in resolver.resolve_iter():
+        pass
+    return resolver.molecule
+
+
+def _counter_diff(string_counts, topology_counts):
+    """Keys whose counts differ, as (key, string count, topology count)."""
+    keys = sorted(set(string_counts) | set(topology_counts), key=str)
+    return [(key, string_counts[key], topology_counts[key]) for key in keys
+            if string_counts[key] != topology_counts[key]]
+
+
+def _heavy_atom_classes(graph):
+    """Per heavy atom, its (element, number of bonded hydrogens)."""
+    classes = {}
+    for node in graph.nodes:
+        if graph.nodes[node]['element'] == 'H':
+            continue
+        n_h = sum(1 for neigh in graph.neighbors(node)
+                  if graph.nodes[neigh]['element'] == 'H')
+        classes[node] = (graph.nodes[node]['element'], n_h)
+    return classes
+
+
+def _describe_mismatch(aa, mol_graph, atom_names=None, max_names=8):
+    """
+    Explains why the all-atom graph of a cgsmiles string does not match a
+    molecule graph from the topology.
+
+    Checks, in order: element composition, the number of hydrogens on each
+    heavy atom, and the bonds between heavy atoms; reports the first that
+    differs.
+
+    Parameters
+    ----------
+    aa: networkx.Graph
+        All-atom graph of the cgsmiles string.
+    mol_graph: networkx.Graph
+        Molecule graph from the topology.
+    atom_names: dict, optional
+        Topology atom names by node, used to point at differing atoms.
+    max_names: int
+        Maximum number of atom names listed.
+
+    Returns
+    -------
+    tuple[tuple[int, int], list[str]]
+        A score (lower is closer) and the lines of the explanation.
+    """
+    lines = [f"atoms (string/topology): {len(aa)}/{len(mol_graph)}"]
+    elements = _counter_diff(Counter(nx.get_node_attributes(aa, 'element').values()),
+                             Counter(nx.get_node_attributes(mol_graph, 'element').values()))
+    element_score = sum(abs(s - t) for _, s, t in elements)
+    if elements:
+        lines.append("elements differ (string/topology): "
+                     + ", ".join(f"{el} {s}/{t}" for el, s, t in elements))
+        return (element_score, 0), lines
+
+    aa_classes = _heavy_atom_classes(aa)
+    mol_classes = _heavy_atom_classes(mol_graph)
+    classes = _counter_diff(Counter(aa_classes.values()), Counter(mol_classes.values()))
+    if classes:
+        lines.append("same elements, but the hydrogens are on different atoms. "
+                     "Heavy atoms by number of bonded H (string/topology): "
+                     + ", ".join(f"{el} with {n_h} H {s}/{t}" for (el, n_h), s, t in classes))
+        surplus = {key for key, s, t in classes if t > s}
+        if atom_names:
+            names = [atom_names[node] for node, key in mol_classes.items() if key in surplus]
+            more = f" ... ({len(names)} in total)" if len(names) > max_names else ""
+            lines.append("topology atoms in the classes that are more common than in "
+                         f"the string: {' '.join(map(str, names[:max_names]))}{more}")
+        return (0, sum(abs(s - t) for _, s, t in classes)), lines
+
+    aa_bonds = aa.subgraph(aa_classes).number_of_edges()
+    mol_bonds = mol_graph.subgraph(mol_classes).number_of_edges()
+    if aa_bonds != mol_bonds:
+        lines.append("same atoms and hydrogens, but a different number of bonds between "
+                     f"heavy atoms (string/topology): {aa_bonds}/{mol_bonds}. "
+                     "Check for missing bonds or ring closures in the topology or string.")
+    else:
+        lines.append("same atoms, hydrogens and number of bonds, but the atoms are "
+                     "connected differently (e.g. a different isomer).")
+    return (0, 0), lines
+
+
+def _no_match_report(candidates, mol_graph, univ):
+    """
+    Explanation for a molecule that no cgsmiles string matches, based on the
+    candidate string closest to the molecule.
+    """
+    atom_names = {node: univ.atoms[node].name for node in mol_graph.nodes}
+    scored = []
+    for cgs_str in candidates:
+        score, lines = _describe_mismatch(_resolve_all_atom(cgs_str), mol_graph, atom_names)
+        scored.append((score, cgs_str, lines))
+    score, cgs_str, lines = min(scored, key=lambda item: item[0])
+    if len(candidates) == 1:
+        header = f"cgsmiles string: {cgs_str}"
+    else:
+        header = f"closest of the {len(candidates)} cgsmiles strings: {cgs_str}"
+    report = [header] + [f"  - {line}" for line in lines]
+    return "\n".join(report)
+
+
 def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     """
     Given a list of mappings described by cgsmiles strings, maps atom indices
@@ -551,7 +659,8 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
                 break
         if resolved is None:
             raise ValueError(
-                f'No matching cgsmiles string found for molecule {mol_name}.'
+                f'No matching cgsmiles string found for molecule {mol_name}.\n'
+                + _no_match_report(candidates, mol_graph, univ)
             )
         cg, aa, match = resolved
 
