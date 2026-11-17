@@ -40,6 +40,10 @@ def load_cgsmiles_library(filepath):
     """
     Given a file that lists cgsmiles strings, read and return them as a list.
 
+    One string per line. Empty lines and lines starting with ``;`` or ``#``
+    (comments) are skipped. Inline comments are not allowed, as both characters
+    are used in cgsmiles strings.
+
     Parameters
     ----------
     filepath: str
@@ -51,7 +55,10 @@ def load_cgsmiles_library(filepath):
     cgsmiles_strs = []
     with open(filepath) as _file:
         for line in _file:
-            cgsmiles_strs.append(line.strip())
+            line = line.strip()
+            if not line or line.startswith((';', '#')):
+                continue
+            cgsmiles_strs.append(line)
     return cgsmiles_strs
 
 
@@ -419,6 +426,22 @@ def _check_contiguous_residues(cg):
             prev_resid = resid
 
 
+def _check_bead_weights(cg, mol_name):
+    """
+    Raises a ValueError if the atom weights of a bead sum to zero (or less),
+    since its position would be a division by zero.
+    """
+    for bead in cg.nodes:
+        bead_graph = cg.nodes[bead]['graph']
+        total = sum(weight for _, weight in bead_graph.nodes(data='weight', default=1.0))
+        if total <= 0:
+            raise ValueError(
+                f"The atom weights of bead {cg.nodes[bead]['fragname']} (bead {bead}) "
+                f"in molecule {mol_name} sum to {total}, so its position is undefined. "
+                "Check the w and wVS annotations."
+            )
+
+
 def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
     """
     Iterates over the given molecule instances and collects per-bead mapped
@@ -485,6 +508,14 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     -------
     list, list, dict
     """
+    if mol_matching and len(cgsmiles_strs) != len(mol_names):
+        raise ValueError(
+            f"Got {len(cgsmiles_strs)} cgsmiles strings for {len(mol_names)} molecule "
+            f"types ({' '.join(mol_names)}). With ordered matching, give exactly one "
+            "string per molecule type, in the same order, or use -nocgsorder to "
+            "match each molecule against all strings."
+        )
+
     all_mapped_atoms, all_bead_idxs, all_weights = [], [], []
     mappings = {}
     bead_count = 0
@@ -513,6 +544,7 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
         # without a residue level, name the residue after the molecule
         mappings = get_mappings(cg, univ, match, mappings, resname_default=mol_name)
         _check_contiguous_residues(cg)
+        _check_bead_weights(cg, mol_name)
         resolved_by_name[mol_name] = (cg, match)
         mol_idxs = univ.mol_idxs_by_name[mol_name]
         offsets = _copy_offsets(first_atom, mol_idxs)
