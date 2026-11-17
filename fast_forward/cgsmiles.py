@@ -399,10 +399,30 @@ def _copy_offsets(first_atom, mol_idxs):
     return [first_atom[mol_idx] - base for mol_idx in mol_idxs]
 
 
+def _check_contiguous_residues(cg):
+    """
+    Raises a ValueError if the beads of a residue are not contiguous in the
+    bead order. Each residue becomes one block of consecutive beads in the
+    CG universe, so split residues cannot be represented.
+    """
+    seen_resids = set()
+    prev_resid = None
+    for bead in cg.nodes:
+        resid = cg.nodes[bead]['resid']
+        if resid != prev_resid:
+            if resid in seen_resids:
+                raise ValueError(
+                    f"The beads of residue {cg.nodes[bead]['resname']} {resid} are "
+                    "not contiguous; check the bead 'index' annotations."
+                )
+            seen_resids.add(resid)
+            prev_resid = resid
+
+
 def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
     """
-    Iterates over all molecule instances and collects per-bead mapped atoms,
-    weights, and bead indices.
+    Iterates over the given molecule instances and collects per-bead mapped
+    atoms, weights, and bead indices.
 
     Parameters
     ----------
@@ -421,21 +441,6 @@ def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
     tuple[list, list, list, int, ResidueIter]
         mapped_atoms, weights, bead_idxs, updated bead_count, res_iter
     """
-    
-	# check if the beads of each residue are contiguous; if not, raise an error
-    seen_resids = set()
-    prev_resid = None
-    for bead in cg.nodes:
-        resid = cg.nodes[bead]['resid']
-        if resid != prev_resid:
-            if resid in seen_resids:
-                raise ValueError(
-                    f"The beads of residue {cg.nodes[bead]['resname']} {resid} are "
-                    "not contiguous; check the bead 'index' annotations."
-                )
-            seen_resids.add(resid)
-            prev_resid = resid
-
     mapped_atoms, weights, bead_idxs = [], [], []
 
     for offset in offsets:
@@ -464,7 +469,8 @@ def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
 def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     """
     Given a list of mappings described by cgsmiles strings, maps atom indices
-    to CG beads using graph isomorphism.
+    to CG beads using graph isomorphism. The beads are returned in topology
+    order, i.e. molecules appear in the same order as in the universe.
 
     Parameters
     ----------
@@ -484,6 +490,9 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     bead_count = 0
     res_iter = ResidueIter()
     first_atom = _first_atom_by_molnum(univ)
+    resolved_by_name = {}
+    # (first atom index, molecule name, offset) of every molecule copy
+    copies = []
 
     for idx, mol_name in enumerate(mol_names):
         mol_graph = univ.molecule_graphs[mol_name]
@@ -503,9 +512,20 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
 
         # without a residue level, name the residue after the molecule
         mappings = get_mappings(cg, univ, match, mappings, resname_default=mol_name)
-        offsets = _copy_offsets(first_atom, univ.mol_idxs_by_name[mol_name])
+        _check_contiguous_residues(cg)
+        resolved_by_name[mol_name] = (cg, match)
+        mol_idxs = univ.mol_idxs_by_name[mol_name]
+        offsets = _copy_offsets(first_atom, mol_idxs)
+        copies.extend((first_atom[mol_idx], mol_name, offset)
+                      for mol_idx, offset in zip(mol_idxs, offsets))
+
+    # emit the beads molecule by molecule in topology order, so the CG output
+    # follows the topology (as with .map files), not the order of mol_names
+    copies.sort(key=lambda copy: copy[0])
+    for _, mol_name, offset in copies:
+        cg, match = resolved_by_name[mol_name]
         mapped_atoms, weights, bead_idxs, bead_count, res_iter = _collect_bead_data(
-            cg, match, offsets, bead_count, res_iter
+            cg, match, [offset], bead_count, res_iter
         )
         all_mapped_atoms.extend(mapped_atoms)
         all_weights.extend(weights)
