@@ -98,6 +98,12 @@ def test_surface_statistic():
         surface_statistic("reference")
 
 
+def test_statistics_match_sassy():
+    sassy = pytest.importorskip("sassy")
+    from fast_forward.sasa import STATISTICS
+    assert set(STATISTICS) == set(sassy.STATISTICS)
+
+
 @pytest.mark.parametrize('tool, stat', [('ff_map', 'average'), ('ff_map', 'reference'), ('ff_assess', 'average')])
 def test_invalid_sasa_stat(tmp_path, tool, stat):
     cmd = [sys.executable, '-m', f'fast_forward.bin.{tool}', '-f', 'x.xtc', '-s', 'x.tpr',

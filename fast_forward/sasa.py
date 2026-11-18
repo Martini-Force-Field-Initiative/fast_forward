@@ -20,6 +20,7 @@ beads gives 1/k to each), leaving out dummy beads, i.e. beads whose atoms all be
 other beads; ``ff_assess`` takes the SASA of every CG bead, virtual sites included, except
 dummy beads (type ``U``, radius 0), which have no SASA.
 """
+import argparse
 from collections import ChainMap
 from pathlib import Path
 import warnings
@@ -33,6 +34,14 @@ from fast_forward.interaction_distribution import distribution
 
 REFERENCE = 'reference' # ff_assess -sasa-surface: the frame closest to the mapped structure of ff_map
 FALLBACK_STATISTIC = 'mode' # without a usable mapped structure
+# the names of sassy.STATISTICS, kept here so -sasa-stat is checked without importing sassy
+STATISTICS = ('median', 'mean', 'mode', 'q1', 'q3', 'min', 'max', 'mean+std', 'mean-std')
+
+
+class StatisticError(ValueError, argparse.ArgumentTypeError):
+    """
+    An unknown -sasa-stat (an ArgumentTypeError, so argparse prints the message as is)
+    """
 
 
 def _sassy():
@@ -52,23 +61,23 @@ def _sassy():
 def surface_statistic(value, allow_reference=False):
     """
     The statistic choosing the representative frame of a surface (``-sasa-stat``): a
-    name of ``sassy.STATISTICS`` ('median', 'mean', 'mode', 'q1', 'q3', 'min', 'max',
+    name of ``STATISTICS`` ('median', 'mean', 'mode', 'q1', 'q3', 'min', 'max',
     'mean+std', 'mean-std') or a fixed SASA (nm^2); with ``allow_reference`` also
-    'reference' (the frame closest to the mapped structure of ``ff_map``).
+    'reference' (the frame closest to the mapped structure of ``ff_map``). Used as the
+    argparse ``type`` of ``-sasa-stat``.
 
     Raises
     ------
-    ValueError
+    StatisticError
         if ``value`` is none of them
     """
-    statistics = _sassy().STATISTICS
-    if value in statistics or (allow_reference and value == REFERENCE):
+    if value in STATISTICS or (allow_reference and value == REFERENCE):
         return value
     try:
         return float(value)
     except ValueError:
-        known = [REFERENCE] * allow_reference + list(statistics)
-        raise ValueError(f"unknown statistic {value!r}: use one of {', '.join(known)} "
+        known = [REFERENCE] * allow_reference + list(STATISTICS)
+        raise StatisticError(f"unknown statistic {value!r}: use one of {', '.join(known)} "
                          "or a SASA in nm^2") from None
 
 

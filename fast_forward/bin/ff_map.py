@@ -133,7 +133,8 @@ def main():
                                  "and the mapped structure of the same molecule and frame "
                                  "(<prefix><mol>_sasa_mapped.pdb) to the -sasa path. "
                                  "'ff_assess -sasa-surface' uses the mapped structure to pick a matching CG frame.")
-    sasa_group.add_argument('-sasa-stat', default=FALLBACK_STATISTIC, dest='sasa_stat', metavar='STAT',
+    sasa_group.add_argument('-sasa-stat', default=FALLBACK_STATISTIC, type=surface_statistic,
+                            dest='sasa_stat', metavar='STAT',
                             help="With -sasa-surface: use the molecule and frame whose SASA is closest to this "
                                  "statistic of the SASA distribution: median, mean, mode (most probable SASA), q1, q3 (quartiles), min, max, mean+std, mean-std, or a SASA in nm^2")
     sasa_group.add_argument('-pref', type=str, dest="prefix", default="",
@@ -142,11 +143,6 @@ def main():
     args = parser.parse_args()
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
-    if args.sasa_surface:
-        try:
-            args.sasa_stat = surface_statistic(args.sasa_stat)
-        except ValueError as err:
-            parser.error(f"-sasa-stat: {err}")
 
     try:
         args.mol_names, cg_names = parse_mol_names(args.mol_names)

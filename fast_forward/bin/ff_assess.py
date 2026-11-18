@@ -87,6 +87,7 @@ def _main():
                              "the B-factor is the SASA of the bead) to the -dists path (default: current dir), in "
                              "the frame chosen by -sasa-stat.")
     parser.add_argument('-sasa-stat', default=REFERENCE, dest='sasa_stat', metavar='STAT',
+                        type=lambda value: surface_statistic(value, allow_reference=True),
                         help="With -sasa-surface: 'reference' uses the frame closest to the mapped structure from "
                              "'ff_map -sasa-surface' (<prefix><mol>_sasa_mapped.pdb in the -d directory), superposed "
                              "onto it, or, without a matching one, the frame whose SASA is closest to the mode; any "
@@ -99,11 +100,6 @@ def _main():
         args.plots = "."
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
-    if args.sasa_surface:
-        try:
-            args.sasa_stat = surface_statistic(args.sasa_stat, allow_reference=True)
-        except ValueError as err:
-            parser.error(f"-sasa-stat: {err}")
     if args.sasa and not (args.tprfile and args.itp_files):
         parser.error("-sasa requires -s (tpr, for the molecule types) and -i (itp files)")
 
