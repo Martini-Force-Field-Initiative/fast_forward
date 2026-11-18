@@ -15,44 +15,13 @@ from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
 from fast_forward.score import hellinger, score_matrix, calc_score
-from fast_forward.sasa import MoleculeSASA, REFERENCE, surface_statistic
-from fast_forward.report import report_interactions, report_distances, report_sasa
+from fast_forward.sasa import REFERENCE, surface_statistic
+from fast_forward.sasa_assessment import assess_sasa
+from fast_forward.report import report_interactions, report_distances
 from collections import defaultdict
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
-
-def _score_sasa(probs, reference_data, hellinger_weight):
-    """
-    Score a SASA distribution against its reference, as the bonded interactions.
-
-    Parameters
-    ----------
-    probs : np.ndarray
-        (n_bins,) simulated (CG) probability density
-    reference_data : np.ndarray
-        (n_bins, 2) reference distribution: bin centre (nm^2), probability density
-    hellinger_weight : float
-        weight of the Hellinger distance in the score
-
-    Returns
-    -------
-    tuple of float or None
-        (Hellinger distance, score, mean reference SASA in nm^2); None if either
-        distribution is empty or not finite, or the scores are not finite (e.g. a
-        reference without spread)
-    """
-    ref_probs = reference_data.T[1]
-    for distr in (probs, ref_probs):
-        # NaN would compare unequal to 0 and slip into the scores and their mean
-        if not (np.all(np.isfinite(distr)) and distr.sum() > 0):
-            return None
-    h_score = hellinger(probs/probs.sum(), ref_probs/ref_probs.sum())
-    score = calc_score(ref_probs/ref_probs.sum(), probs/probs.sum(), [hellinger_weight, 1-hellinger_weight], 'sasa')
-    # e.g. a reference in a single bin has no spread, so the mean difference is NaN
-    if not (np.isfinite(h_score) and np.isfinite(score)):
-        return None
-    return h_score, score, np.average(reference_data.T[0], weights=ref_probs)
 
 def _main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
@@ -219,101 +188,12 @@ def _main():
 
                     report_distances(score_m, molname, atom_names)
 
-        # evaluation of the solvent accessible surface area: score the SASA distribution of every
-        # molecule, and of every bead, of the CG trajectory against the references written by 'ff_map -sasa'
+        # evaluation of the solvent accessible surface area against the references of 'ff_map -sasa'
         if args.sasa:
-            print("INFO - Evaluating SASA")
-            sasa_h_scores = {}
-            sasa_scores = {}
-            sasa_means = {}
-            sasa_bead_results = {} # molname: {bead: (Hellinger distance, score, CG mean, reference mean)}
-            sasa_plot_data = defaultdict(dict)
-            for molname in ff.blocks.keys():
-                print(f"INFO - Calculating SASA of {molname}")
-                mol_atoms = u.select_atoms(f"moltype {molname}")
-                if mol_atoms.n_atoms == 0:
-                    print(f"WARNING - No molecules of type {molname} in the trajectory; skipping its SASA.")
-                    continue
-                reference_name = f"{args.prefix}{molname}_sasa_distr.dat"
-                try:
-                    ref_file = file_map[reference_name]
-                except KeyError:
-                    available = sorted(name for name in file_map if name.endswith('_sasa_distr.dat'))
-                    # e.g. another solute or ions in the itp files: assess the others, as for missing beads
-                    msg = (f"WARNING - No reference SASA for {molname} ({reference_name} in {args.reference}); "
-                           f"skipping its SASA. Generate it with 'ff_map -sasa {args.reference} "
-                           f"-mols <AA name>:{molname}' to name it after the CG molecule.")
-                    if available:
-                        msg += f" SASA references found: {', '.join(available)}."
-                    if args.prefix == "":
-                        msg += (" your prefix is set to the default value: consider changing it to the "
-                                "actual prefix.")
-                    print(msg)
-                    continue
-
-                mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=args.prefix)
-                # SASA of every bead (without dummies), assessed and saved as the interactions
-                mol_sasa.cg_bead_sasa(ff.blocks[molname])
-                if args.distribution_data:
-                    mol_sasa.save(args.distribution_data)
-                probs = mol_sasa.distribution.T[1]
-                reference_data = np.genfromtxt(ref_file)
-                result = _score_sasa(probs, reference_data, args.hellinger_weight)
-                if result is None:
-                    print(f"WARNING - Empty or invalid (NaN) SASA distribution for {molname}; skipping its score.")
-                    continue
-                sasa_h_scores[molname], sasa_scores[molname], ref_mean = result
-                sasa_means[molname] = (mol_sasa.series.mean(), ref_mean)
-
-                if args.sasa_surface:
-                    mol_sasa.write_cg_surface(reference_dir=args.reference, outdir=args.distribution_data or ".",
-                                              statistic=args.sasa_stat)
-                if args.plots:
-                    sasa_plot_data['sasa'][molname] = {"x": reference_data.T[0],
-                                                       "Reference": reference_data.T[1],
-                                                       "Simulated": probs}
-
-                # every bead against its reference <prefix><mol>_<resid>_<bead>_sasa_distr.dat from 'ff_map -sasa'
-                bead_results = {}
-                bead_plot_data = defaultdict(dict)
-                missing, empty = [], []
-                for bead, series, distr in zip(mol_sasa.bead_names, mol_sasa.bead_series,
-                                               mol_sasa.bead_distributions):
-                    bead_ref_file = file_map.get(f"{args.prefix}{molname}_{bead}_sasa_distr.dat")
-                    if bead_ref_file is None:
-                        missing.append(bead)
-                        continue
-                    bead_reference = np.genfromtxt(bead_ref_file)
-                    result = _score_sasa(distr.T[1], bead_reference, args.hellinger_weight)
-                    if result is None:
-                        empty.append(bead)
-                        continue
-                    h_score, score, bead_ref_mean = result
-                    bead_results[bead] = (h_score, score, series.mean(), bead_ref_mean)
-                    if args.plots:
-                        bead_plot_data['sasa'][bead] = {"x": bead_reference.T[0],
-                                                        "Reference": bead_reference.T[1],
-                                                        "Simulated": distr.T[1]}
-                if missing:
-                    print(f"WARNING - No reference SASA for the bead(s) {', '.join(missing)} of {molname} "
-                          f"({args.prefix}{molname}_<bead>_sasa_distr.dat in {args.reference}); they are not "
-                          "assessed. 'ff_map -sasa' writes them for every bead of the mapping except dummy beads.")
-                if empty:
-                    print(f"WARNING - Empty or invalid (NaN) SASA distribution for the bead(s) {', '.join(empty)} of {molname}; "
-                          "skipping their score.")
-                if bead_results:
-                    sasa_bead_results[molname] = bead_results
-                if args.plots and bead_plot_data:
-                    make_distribution_plot(bead_plot_data, args.plot_data,
-                                           name=f'{args.plots}/sasa_bead_distributions_{molname}',
-                                           data_name=f'plot_data_sasa_beads_{molname}.p')
-            if not sasa_scores:
-                print("WARNING - No SASA could be assessed.")
-            else:
-                if args.plots:
-                    make_distribution_plot(sasa_plot_data, args.plot_data, name=f'{args.plots}/sasa_distributions',
-                                           data_name='plot_data_sasa.p')
-                report_sasa(sasa_h_scores, sasa_scores, sasa_means, sasa_bead_results)
+            assess_sasa(u, ff.blocks, file_map, args.reference, prefix=args.prefix,
+                        hellinger_weight=args.hellinger_weight, distribution_data=args.distribution_data,
+                        plots=args.plots, plot_data=args.plot_data, sasa_surface=args.sasa_surface,
+                        sasa_stat=args.sasa_stat)
 
 
 def main():

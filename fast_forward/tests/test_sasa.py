@@ -425,3 +425,23 @@ def test_ff_assess_sasa_without_bead_references(tmp_path):
     assert "GSH" in report and "Bead SASA" not in report
     assert (tmp_path / "sasa_distributions.png").is_file()
     assert not (tmp_path / "sasa_bead_distributions_GSH.png").exists()
+
+
+def test_score_sasa_invalid():
+    from fast_forward.interaction_distribution import INTERACTIONS
+    from fast_forward.sasa_assessment import score_sasa
+    bins = INTERACTIONS['sasa']['bins']
+    centres = (bins[:-1] + bins[1:]) / 2
+    n_bins = len(centres)
+    gauss = np.exp(-((np.arange(n_bins) - n_bins / 2) / 5)**2)
+    reference = np.column_stack([centres, gauss])
+    h_score, score, _ = score_sasa(gauss, reference, 0.7)
+    assert h_score == pytest.approx(0) and score == pytest.approx(0)
+    # empty or NaN distributions, and a reference without spread (NaN score), are not scored
+    assert score_sasa(np.zeros(n_bins), reference, 0.7) is None
+    assert score_sasa(np.full(n_bins, np.nan), reference, 0.7) is None
+    assert score_sasa(gauss, np.column_stack([centres, np.full(n_bins, np.nan)]), 0.7) is None
+    delta = np.zeros(n_bins)
+    delta[n_bins // 2] = 1
+    with np.errstate(invalid='ignore', divide='ignore'):
+        assert score_sasa(delta, np.column_stack([centres, delta]), 0.7) is None
