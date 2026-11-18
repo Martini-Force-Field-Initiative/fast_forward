@@ -101,22 +101,6 @@ def cite_aa_radii(ag: mda.AtomGroup):
         print(f"\nPhosphorus atoms use atomistic van der Waals radii from:\n{cite_string}\n")
 
 
-def mapped_beads(mapped_atoms, atom_indices):
-    """
-    Indices of the beads built only from the AA atoms ``atom_indices``.
-
-    Parameters
-    ----------
-    mapped_atoms : list of list of int
-        AA atom indices of every bead
-    atom_indices : array of int
-        AA atom indices, e.g. of one molecule or of all molecules of a type
-    """
-    atom_indices = set(int(idx) for idx in atom_indices)
-    return [bdx for bdx, atoms in enumerate(mapped_atoms)
-            if len(atoms) and set(int(idx) for idx in atoms) <= atom_indices]
-
-
 def map_sasa(atom_sasa, beads):
     """
     Map the SASA of atoms to beads: every atom contributes equally (mapping weights
@@ -230,6 +214,7 @@ class MoleculeSASA:
         self.series = results.body_sasa.ravel() # (n_molecules * n_frames,) SASA of every molecule in every frame
         self.distribution = distribution(self.series, 'sasa', mol_name) 
         self.bead_names = self.bead_series = self.bead_distributions = None
+        self.molecule_beads = None # (AA) bead indices in the mapped universe of every molecule, from map_to_beads
 
     @property
     def molecule_type(self):
@@ -309,6 +294,9 @@ class MoleculeSASA:
             rows = row[np.asarray(list(atoms), dtype=np.int64)]
             if len(rows) and (rows >= 0).all() and (molecule_of_row[rows] == molecule_of_row[rows[0]]).all(): # all atoms of this bead belong to one molecule of this type
                 mol_beads[molecule_of_row[rows[0]]].append((bdx, rows))
+
+        # every bead of every molecule, dummies included (write_mapped_structure)
+        self.molecule_beads = [[bdx for bdx, _ in beads] for beads in mol_beads]
 
         names, sasa_per_molecule, n_unassigned, unassigned_names = None, [], 0, {}
         for m, beads in enumerate(mol_beads):
@@ -421,7 +409,7 @@ class MoleculeSASA:
               f"{surface.frame} ({surface.area:.2f} nm^2, {chosen}) to {fname}")
         return surface
 
-    def write_mapped_structure(self, surface, cg_universe, mapped_atoms, outdir="."):
+    def write_mapped_structure(self, surface, cg_universe, outdir="."):
         """
         Write the mapped (CG) structure of the AA molecule and frame of ``surface`` as
         ``<outdir>/<prefix><mol_name>_sasa_mapped.pdb``; ``ff_assess -sasa-surface``
@@ -432,11 +420,16 @@ class MoleculeSASA:
         surface : sassy.Surface
             AA surface from :meth:`write_surface`
         cg_universe : MDAnalysis.Universe
-            the mapped universe, bead i built from the AA atoms ``mapped_atoms[i]``
-        mapped_atoms : list of list of int
-            AA atom indices of every bead
+            the mapped universe given to :meth:`map_to_beads`, which must be called first
+
+        Raises
+        ------
+        RuntimeError
+            if :meth:`map_to_beads` was not called
         """
-        beads = mapped_beads(mapped_atoms, surface.atoms.indices)
+        if self.molecule_beads is None:
+            raise RuntimeError("write_mapped_structure needs the beads of every molecule: call map_to_beads first")
+        beads = self.molecule_beads[surface.body]
         if not beads:
             print(f"WARNING - No mapped beads found for the SASA surface molecule of {self.mol_name}; "
                   "the mapped structure is not written.")

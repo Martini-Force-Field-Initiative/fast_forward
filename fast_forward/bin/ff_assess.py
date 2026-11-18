@@ -39,13 +39,19 @@ def _score_sasa(probs, reference_data, hellinger_weight):
     -------
     tuple of float or None
         (Hellinger distance, score, mean reference SASA in nm^2); None if either
-        distribution is empty
+        distribution is empty or not finite, or the scores are not finite (e.g. a
+        reference without spread)
     """
     ref_probs = reference_data.T[1]
-    if probs.sum() == 0 or ref_probs.sum() == 0:
-        return None
+    for distr in (probs, ref_probs):
+        # NaN would compare unequal to 0 and slip into the scores and their mean
+        if not (np.all(np.isfinite(distr)) and distr.sum() > 0):
+            return None
     h_score = hellinger(probs/probs.sum(), ref_probs/ref_probs.sum())
     score = calc_score(ref_probs/ref_probs.sum(), probs/probs.sum(), [hellinger_weight, 1-hellinger_weight], 'sasa')
+    # e.g. a reference in a single bin has no spread, so the mean difference is NaN
+    if not (np.isfinite(h_score) and np.isfinite(score)):
+        return None
     return h_score, score, np.average(reference_data.T[0], weights=ref_probs)
 
 def _main():
@@ -233,15 +239,17 @@ def _main():
                     ref_file = file_map[reference_name]
                 except KeyError:
                     available = sorted(name for name in file_map if name.endswith('_sasa_distr.dat'))
-                    msg = (f"{reference_name} file not found! Generate the reference SASA with "
-                           f"'ff_map -sasa {args.reference} -mols <AA name>:{molname}' to name it after the CG "
-                           f"molecule.")
+                    # e.g. another solute or ions in the itp files: assess the others, as for missing beads
+                    msg = (f"WARNING - No reference SASA for {molname} ({reference_name} in {args.reference}); "
+                           f"skipping its SASA. Generate it with 'ff_map -sasa {args.reference} "
+                           f"-mols <AA name>:{molname}' to name it after the CG molecule.")
                     if available:
                         msg += f" SASA references found: {', '.join(available)}."
                     if args.prefix == "":
                         msg += (" your prefix is set to the default value: consider changing it to the "
                                 "actual prefix.")
-                    raise FileNotFoundError(msg) from None
+                    print(msg)
+                    continue
 
                 mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=args.prefix)
                 # SASA of every bead (without dummies), assessed and saved as the interactions
@@ -252,7 +260,7 @@ def _main():
                 reference_data = np.genfromtxt(ref_file)
                 result = _score_sasa(probs, reference_data, args.hellinger_weight)
                 if result is None:
-                    print(f"WARNING - Empty SASA distribution for {molname}; skipping its score.")
+                    print(f"WARNING - Empty or invalid (NaN) SASA distribution for {molname}; skipping its score.")
                     continue
                 sasa_h_scores[molname], sasa_scores[molname], ref_mean = result
                 sasa_means[molname] = (mol_sasa.series.mean(), ref_mean)
@@ -291,7 +299,7 @@ def _main():
                           f"({args.prefix}{molname}_<bead>_sasa_distr.dat in {args.reference}); they are not "
                           "assessed. 'ff_map -sasa' writes them for every bead of the mapping except dummy beads.")
                 if empty:
-                    print(f"WARNING - Empty SASA distribution for the bead(s) {', '.join(empty)} of {molname}; "
+                    print(f"WARNING - Empty or invalid (NaN) SASA distribution for the bead(s) {', '.join(empty)} of {molname}; "
                           "skipping their score.")
                 if bead_results:
                     sasa_bead_results[molname] = bead_results

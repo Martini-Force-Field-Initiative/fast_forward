@@ -258,7 +258,7 @@ def main():
             if args.sasa_surface:
                 # AA surface of a representative frame and the mapped structure of that frame
                 surface = mol_sasa.write_surface(args.sasa, statistic=args.sasa_stat)
-                mol_sasa.write_mapped_structure(surface, cg_universe, mapped_atoms, outdir=args.sasa)
+                mol_sasa.write_mapped_structure(surface, cg_universe, outdir=args.sasa)
 
     # write coordinate
     print("INFO - Writing CG trajectory")

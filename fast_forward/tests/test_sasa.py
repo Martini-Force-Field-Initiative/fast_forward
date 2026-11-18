@@ -260,8 +260,10 @@ def test_ff_assess_sasa_missing_reference(tmp_path):
                  '-f', str(GSH_ASSESS_TRAJ), '-s', str(GSH_ASSESS_TPR), '-i', str(GSH_ITP_OUTPUT),
                  '-d', str(ref), '-interactions-only', '-sasa']
     proc = subprocess.run(ff_assess, cwd=tmp_path, timeout=600, capture_output=True, text=True, env=ENV)
-    assert proc.returncode != 0
-    assert "GSH_sasa_distr.dat file not found" in proc.stderr
+    # a molecule without a reference is skipped with a warning, as a bead without one
+    assert proc.returncode == 0, proc.stderr
+    assert "No reference SASA for GSH (GSH_sasa_distr.dat" in proc.stdout
+    assert "No SASA could be assessed" in proc.stdout
 
 
 @pytest.mark.parametrize('beads, expected', [
