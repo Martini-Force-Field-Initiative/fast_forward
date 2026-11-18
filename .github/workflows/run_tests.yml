@@ -10,12 +10,20 @@ on:
 jobs:
 
   test:
+      name: test (Python ${{ matrix.python-version }}, sassy ${{ matrix.sasa }})
       runs-on: ubuntu-latest
 
       strategy:
         fail-fast: false
         matrix:
           python-version: ['3.11', '3.12', '3.13']
+          # the SASA tests need the optional 'sasa' extra (sassy)
+          sasa: [true]
+          include:
+            # one job without sassy: the SASA code must still import and its
+            # sassy-free tests (test_sasa_core.py) must pass
+            - python-version: '3.13'
+              sasa: false
 
       steps:
       - uses: actions/checkout@v6
@@ -31,7 +39,11 @@ jobs:
         # and the integration tests read their data from examples/ in the checkout
         run: |
           pip install --upgrade setuptools pip
-          pip install --upgrade -e .
+          if [ "${{ matrix.sasa }}" = "true" ]; then
+            pip install --upgrade -e ".[sasa]"
+          else
+            pip install --upgrade -e .
+          fi
           pip install --group tests
 
       - name: Run tests

@@ -1,4 +1,5 @@
 
+import os
 from pathlib import Path
 
 # the GSH example/test data lives in examples/GSH at the repository root,
@@ -31,5 +32,9 @@ GSH_DISTS = EXAMPLES_DATA / 'interactions/*.dat'
 GSH_ASSESS_TRAJ = EXAMPLES_DATA / 'assessment/simulated.xtc'
 GSH_ASSESS_TPR = EXAMPLES_DATA / 'assessment/simulated.tpr'
 GSH_ASSESS_REFERENCE = EXAMPLES_DATA / 'assessment/reference'
+
+# environment to run the command line tools of this checkout (not of another installed copy)
+ENV = {**os.environ, 'PYTHONPATH': os.pathsep.join(filter(None, [
+    str(Path(__file__).resolve().parents[2]), os.environ.get('PYTHONPATH')]))}
 
 del Path

@@ -1,5 +1,6 @@
 """
-Tests for the SASA calculation (fast_forward.sasa) and its use in ff_map and ff_assess.
+Tests of the SASA calculation (fast_forward.sasa) and its use in ff_map and ff_assess that need
+sassy; they are skipped without it. The tests without sassy are in test_sasa_core.py.
 """
 import os
 import re
@@ -12,8 +13,7 @@ import numpy as np
 import pytest
 import MDAnalysis as mda
 
-from fast_forward.interaction_distribution import INTERACTIONS, RECOGNISED_INTERACTIONS, distribution
-from fast_forward.tests.datafiles import (GSH_AA_TRAJ, GSH_AA_TPR, GSH_MAP, GSH_ASSESS_TRAJ, GSH_ASSESS_TPR,
+from fast_forward.tests.datafiles import (ENV, GSH_AA_TRAJ, GSH_AA_TPR, GSH_MAP, GSH_ASSESS_TRAJ, GSH_ASSESS_TPR,
                                           GSH_ITP_OUTPUT, GSH_ASSESS_REFERENCE, HAVE_EXAMPLES_DATA,
                                            MISSING_EXAMPLES_DATA_REASON)
 
@@ -22,9 +22,6 @@ needs_data = pytest.mark.skipif(not HAVE_EXAMPLES_DATA, reason=MISSING_EXAMPLES_
 
 from fast_forward.sasa import MoleculeSASA  # noqa: E402
 
-# run the command line tools of this fast_forward (not of another installed copy)
-ENV = {**os.environ, 'PYTHONPATH': os.pathsep.join(filter(None, [
-    str(Path(__file__).resolve().parents[2]), os.environ.get('PYTHONPATH')]))}
 
 def _bead_sasa(directory, mol="GSH", suffix="sasa.dat"):
     """{bead name: SASA time series (or distribution, suffix 'sasa_distr.dat')} of the real beads, via the bead table"""
@@ -35,34 +32,6 @@ def _bead_sasa(directory, mol="GSH", suffix="sasa.dat"):
 
 
 SASA_LINE = re.compile(r'^\t(\S+)\s*:\s*([-\d.]+)\s*\(([-\d.]+)\)\s+([-\d.]+) / ([-\d.]+)')
-
-
-def test_sasa_not_a_bonded_interaction():
-    # ff_inter loops over the recognised interactions; the SASA only needs bins for scoring
-    assert 'sasa' in INTERACTIONS
-    assert 'sasa' not in RECOGNISED_INTERACTIONS
-
-
-@pytest.mark.parametrize('inter_type, mean, std', [('bonds', 0.35, 0.02),
-                                                   ('angles', 120, 10),
-                                                   ('dihedrals', 0, 40),
-                                                   ('distances', 5, 1),
-                                                   ('sasa', 6.0, 0.2)])
-def test_distribution_normalised(inter_type, mean, std):
-    bins = INTERACTIONS[inter_type]['bins']
-    series = np.random.default_rng(1).normal(mean, std, 1000)
-    distr = distribution(series, inter_type)
-    assert distr.shape == (len(bins) - 1, 2)
-    assert np.allclose(distr[:, 0], bins[:-1] + np.diff(bins) / 2)
-    assert np.isclose(np.sum(distr[:, 1] * np.diff(bins)), 1.0)
-
-
-def test_distribution_warns_outside(capsys):
-    distr = distribution(np.array([5.0, 6.0, 150.0]), 'sasa', 'GSH')
-    assert "1 of 3 values of GSH sasa lie outside" in capsys.readouterr().out
-    # the value outside is not counted
-    bins = INTERACTIONS['sasa']['bins']
-    assert np.isclose(np.sum(distr[:, 1] * np.diff(bins)), 1.0)
 
 
 @needs_data
@@ -93,33 +62,10 @@ def test_molecule_sasa_aa(tmp_path):
     assert np.isclose(series[surface.frame], series.max())
 
 
-def test_surface_statistic():
-    from fast_forward.sasa import surface_statistic
-    assert surface_statistic("mode") == "mode"
-    assert surface_statistic("mean+std") == "mean+std"
-    assert surface_statistic("5.5") == 5.5
-    with pytest.raises(ValueError, match="unknown statistic 'average'"):
-        surface_statistic("average")
-    # 'reference' only for ff_assess
-    assert surface_statistic("reference", allow_reference=True) == "reference"
-    with pytest.raises(ValueError, match="unknown statistic 'reference'"):
-        surface_statistic("reference")
-
-
 def test_statistics_match_sassy():
     sassy = pytest.importorskip("sassy")
     from fast_forward.sasa import STATISTICS
     assert set(STATISTICS) == set(sassy.STATISTICS)
-
-
-@pytest.mark.parametrize('tool, stat', [('ff_map', 'average'), ('ff_map', 'reference'), ('ff_assess', 'average')])
-def test_invalid_sasa_stat(tmp_path, tool, stat):
-    cmd = [sys.executable, '-m', f'fast_forward.bin.{tool}', '-f', 'x.xtc', '-s', 'x.tpr',
-           '-sasa', '-sasa-surface', '-sasa-stat', stat]
-    cmd += ['-mols', 'LIG', '-o', 'out.gro'] if tool == 'ff_map' else ['-i', 'x.itp']
-    proc = subprocess.run(cmd, cwd=tmp_path, timeout=60, capture_output=True, text=True, env=ENV)
-    assert proc.returncode == 2
-    assert f"-sasa-stat: unknown statistic '{stat}'" in proc.stderr
 
 
 @needs_data
@@ -243,24 +189,6 @@ def test_ff_map_sasa_without_cg_name(tmp_path):
     assert (tmp_path / "LIG_sasa_distr.dat").is_file()
 
 
-def test_parse_mol_names():
-    from fast_forward.bin.ff_map import parse_mol_names
-    assert parse_mol_names(['LIG:GSH', 'POPC']) == (['LIG', 'POPC'], {'LIG': 'GSH'})
-    assert parse_mol_names(['LIG']) == (['LIG'], {})
-    for entry in ['LIG:', ':GSH', 'LIG:GSH:X', '']:
-        with pytest.raises(ValueError, match="invalid -mols entry"):
-            parse_mol_names([entry])
-
-
-@pytest.mark.parametrize('mols', ['LIG:', ':GSH', 'LIG:GSH:X'])
-def test_ff_map_invalid_mols(tmp_path, mols):
-    ff_map = [sys.executable, '-m', 'fast_forward.bin.ff_map', '-f', 'x.xtc', '-s', 'x.tpr',
-              '-mols', mols, '-o', 'out.gro']
-    proc = subprocess.run(ff_map, cwd=tmp_path, timeout=60, capture_output=True, text=True, env=ENV)
-    assert proc.returncode == 2
-    assert f"invalid -mols entry '{mols}'" in proc.stderr
-
-
 @needs_data
 def test_ff_assess_sasa_missing_reference(tmp_path):
     ref = tmp_path / "ref"
@@ -273,47 +201,6 @@ def test_ff_assess_sasa_missing_reference(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert "No reference SASA for GSH (GSH_sasa_distr.dat" in proc.stdout
     assert "No SASA could be assessed" in proc.stdout
-
-
-@pytest.mark.parametrize('beads, expected', [
-    # dummy built from the atoms of its two neighbours, in any position
-    ([[0, 1], [2, 3], [0, 1, 2, 3]], [False, False, True]),
-    ([[0, 1, 2, 3], [0, 1], [2, 3]], [True, False, False]),
-    # beads sharing an atom are not dummies
-    ([[0, 1, 2], [2, 3, 4]], [False, False]),
-    # of identical beads the first is kept
-    ([[0, 1], [1, 0]], [False, True]),
-    # empty beads are not dummies
-    ([[0, 1], []], [False, False]),
-])
-def test_map_sasa_dummy_beads(beads, expected):
-    from fast_forward.sasa import map_sasa
-    atom_sasa = np.arange(1.0, 6.0)[:, None] # 5 atoms, 1 frame
-    bead_sasa, dummy, _ = map_sasa(atom_sasa, beads)
-    assert dummy.tolist() == expected
-    # one row per non-dummy bead
-    assert bead_sasa.shape == (expected.count(False), 1)
-
-
-def test_map_sasa_shared():
-    from fast_forward.sasa import map_sasa
-    atom_sasa = np.array([[1.0, 2.0], [4.0, 8.0], [0.5, 0.5], [3.0, 3.0]]) # 4 atoms, 2 frames
-    # atom 1 is shared (and listed twice in bead 0), atom 3 is in no bead
-    bead_sasa, dummy, unassigned = map_sasa(atom_sasa, [[0, 1, 1], [1, 2]])
-    assert not dummy.any()
-    assert np.allclose(bead_sasa, [[1.0 + 2.0, 2.0 + 4.0], [2.0 + 0.5, 4.0 + 0.5]])
-    assert unassigned.tolist() == [3]
-    assert np.allclose(bead_sasa.sum(axis=0) + atom_sasa[3], atom_sasa.sum(axis=0))
-
-
-def test_map_sasa_dummy_takes_no_share():
-    from fast_forward.sasa import map_sasa
-    atom_sasa = np.array([[1.0], [2.0], [4.0], [8.0]]) # 4 atoms, 1 frame
-    # bead 2 is a dummy on all atoms; atom 1 is shared by beads 0 and 1 only
-    bead_sasa, dummy, unassigned = map_sasa(atom_sasa, [[0, 1], [1, 2, 3], [0, 1, 2, 3]])
-    assert dummy.tolist() == [False, False, True]
-    assert np.allclose(bead_sasa, [[1.0 + 1.0], [1.0 + 4.0 + 8.0]])
-    assert len(unassigned) == 0
 
 
 def _run_ff_map_beads(map_file, outdir):
@@ -482,21 +369,3 @@ def test_ff_assess_bead_matching(tmp_path):
     assert beads == []
 
 
-def test_score_sasa_invalid():
-    from fast_forward.interaction_distribution import INTERACTIONS
-    from fast_forward.sasa_assessment import score_sasa
-    bins = INTERACTIONS['sasa']['bins']
-    centres = (bins[:-1] + bins[1:]) / 2
-    n_bins = len(centres)
-    gauss = np.exp(-((np.arange(n_bins) - n_bins / 2) / 5)**2)
-    reference = np.column_stack([centres, gauss])
-    h_score, score, _ = score_sasa(gauss, reference, 0.7)
-    assert h_score == pytest.approx(0) and score == pytest.approx(0)
-    # empty or NaN distributions, and a reference without spread (NaN score), are not scored
-    assert score_sasa(np.zeros(n_bins), reference, 0.7) is None
-    assert score_sasa(np.full(n_bins, np.nan), reference, 0.7) is None
-    assert score_sasa(gauss, np.column_stack([centres, np.full(n_bins, np.nan)]), 0.7) is None
-    delta = np.zeros(n_bins)
-    delta[n_bins // 2] = 1
-    with np.errstate(invalid='ignore', divide='ignore'):
-        assert score_sasa(delta, np.column_stack([centres, delta]), 0.7) is None
