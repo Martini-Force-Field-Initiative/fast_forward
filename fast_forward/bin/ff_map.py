@@ -252,7 +252,9 @@ def main():
             print(f"INFO - Calculating SASA of {mol_name} (CG molecule {cg_name})")
             mol_sasa = MoleculeSASA(mol_atoms, cg_name, cg=False, prefix=args.prefix)
             # split the SASA of the atoms over the beads of the mapping
-            mol_sasa.map_to_beads(mapped_atoms, cg_universe)
+            # the plain bead names (CGsmiles beads are named <fragment name><node index>)
+            bead_labels = {bead: label for mapping in mappings.values() for bead, label in mapping.bead_labels.items()}
+            mol_sasa.map_to_beads(mapped_atoms, cg_universe, bead_labels=bead_labels)
             mol_sasa.save(args.sasa)
             print(f"INFO - SASA of {mol_name}: {mol_sasa.series.mean():.3f} ± {mol_sasa.series.std():.3f} nm^2")
             if args.sasa_surface:

@@ -158,6 +158,7 @@ def get_mappings(cg, univ, _match, mappings):
         target_resids[resname] = target_resid
         if resid != target_resids[resname]:
             continue
+        mapping.bead_labels[cg.nodes[bead]["fragname"]+f"{bead}"] = cg.nodes[bead]["fragname"]
         for atom in atoms:
             weight = np.float32(cg.nodes[bead]['graph'].nodes[atom].get('weight', 1))
             mapping.add_atom(

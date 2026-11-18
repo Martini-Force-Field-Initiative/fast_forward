@@ -26,6 +26,14 @@ from fast_forward.sasa import MoleculeSASA  # noqa: E402
 ENV = {**os.environ, 'PYTHONPATH': os.pathsep.join(filter(None, [
     str(Path(__file__).resolve().parents[2]), os.environ.get('PYTHONPATH')]))}
 
+def _bead_sasa(directory, mol="GSH", suffix="sasa.dat"):
+    """{bead name: SASA time series (or distribution, suffix 'sasa_distr.dat')} of the real beads, via the bead table"""
+    from fast_forward.sasa import read_bead_table
+    rows = read_bead_table(Path(directory) / f"{mol}_sasa_beads.dat")
+    return {row.label: np.loadtxt(Path(directory) / row.file.replace("sasa_distr.dat", suffix))
+            for row in rows if not row.dummy}
+
+
 SASA_LINE = re.compile(r'^\t(\S+)\s*:\s*([-\d.]+)\s*\(([-\d.]+)\)\s+([-\d.]+) / ([-\d.]+)')
 
 
@@ -155,12 +163,13 @@ def test_ff_map_ff_assess_sasa(tmp_path):
     assert "Phosphorus atoms" not in proc.stdout
     for name in ("GSH_sasa.dat", "GSH_sasa_distr.dat", "GSH_sasa_dots_AA.pdb", "GSH_sasa_mapped.pdb"):
         assert (ref / name).is_file(), name
-    # the SASA of every bead of the mapping, adding up to that of the molecule
-    beads = ["1_CAC1", "1_AMC1", "1_AMD1", "1_SUL1", "1_AMD2", "1_CAC2"]
-    for bead in beads:
-        assert (ref / f"GSH_{bead}_sasa_distr.dat").is_file(), bead
-    assert np.allclose(sum(np.loadtxt(ref / f"GSH_{bead}_sasa.dat") for bead in beads),
-                       np.loadtxt(ref / "GSH_sasa.dat"))
+    # the SASA of every bead of the mapping, by position, adding up to that of the molecule
+    beads = ["CAC1", "AMC1", "AMD1", "SUL1", "AMD2", "CAC2"]
+    table = (ref / "GSH_sasa_beads.dat").read_text().splitlines()
+    assert table[1:] == [f"{k}  {bead}  real  GSH_1_{bead}_sasa_distr.dat" for k, bead in enumerate(beads, 1)]
+    ref_beads = _bead_sasa(ref)
+    assert list(ref_beads) == beads
+    assert np.allclose(sum(ref_beads.values()), np.loadtxt(ref / "GSH_sasa.dat"))
     # the mapped structure has one bead per bead of the CG molecule
     assert mda.Universe(str(ref / "GSH_sasa_mapped.pdb")).atoms.n_atoms == 6
 
@@ -185,11 +194,12 @@ def test_ff_map_ff_assess_sasa(tmp_path):
     assert "Overall Bead Score" in bead_part
     matches = [SASA_LINE.match(line) for line in bead_part.splitlines()]
     bead_scores = {m.group(1): tuple(map(float, m.groups()[1:])) for m in matches if m}
-    assert set(bead_scores) == set(beads)
+    assert set(bead_scores) == {f"1_{bead}" for bead in beads} # named as in the CG itp
     for bead, (h_score, score, cg_mean, ref_mean) in bead_scores.items():
         assert 0.0 <= h_score <= 1.0 and 0.0 <= score <= 1.0
         # the reference mean is that of the bead SASA written by ff_map
-        assert np.isclose(ref_mean, np.loadtxt(ref / f"GSH_{bead}_sasa.dat").mean(), atol=0.01)
+        assert np.isclose(ref_mean, ref_beads[bead[2:]].mean(), atol=0.01)
+    assert "named differently" not in proc.stdout and "not assessed" not in proc.stdout
     # CG surface, superposed onto the mapped structure
     assert "Superposed onto the reference structure" in (tmp_path / "GSH_sasa_dots_CG.pdb").read_text()
 
@@ -202,10 +212,9 @@ def test_ff_map_ff_assess_sasa(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert (tmp_path / "sasa_distributions.png").is_file()
     assert (tmp_path / "sasa_bead_distributions_GSH.png").is_file()
-    cg_beads = sorted(p.name for p in dists.glob("GSH_1_*_sasa_distr.dat"))
-    assert cg_beads == sorted(f"GSH_{bead}_sasa_distr.dat" for bead in beads)
-    assert np.allclose(sum(np.loadtxt(dists / f"GSH_{bead}_sasa.dat") for bead in beads),
-                       np.loadtxt(dists / "GSH_sasa.dat"))
+    cg_beads = _bead_sasa(dists)
+    assert list(cg_beads) == beads
+    assert np.allclose(sum(cg_beads.values()), np.loadtxt(dists / "GSH_sasa.dat"))
 
 
 @needs_data
@@ -313,8 +322,7 @@ def _run_ff_map_beads(map_file, outdir):
               '-mols', 'LIG:GSH', '-o', 'mapped.xtc', '-sasa', str(outdir)]
     proc = subprocess.run(ff_map, cwd=outdir, timeout=600, capture_output=True, text=True, env=ENV)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    beads = {p.name[len("GSH_"):-len("_sasa.dat")]: np.loadtxt(p) for p in outdir.glob("GSH_1_*_sasa.dat")}
-    return proc, np.loadtxt(outdir / "GSH_sasa.dat"), beads
+    return proc, np.loadtxt(outdir / "GSH_sasa.dat"), _bead_sasa(outdir)
 
 
 def _modified_map(path, edit):
@@ -335,7 +343,7 @@ def test_ff_map_bead_sasa(tmp_path):
     for name in ("full", "shared", "vs"):
         (tmp_path / name).mkdir()
     _, sasa, full = _run_ff_map_beads(GSH_MAP, tmp_path / "full")
-    assert sorted(full) == ["1_AMC1", "1_AMD1", "1_AMD2", "1_CAC1", "1_CAC2", "1_SUL1"]
+    assert sorted(full) == ["AMC1", "AMD1", "AMD2", "CAC1", "CAC2", "SUL1"]
 
     # C6 shared by AMD1 and SUL1 with weights 0.3/0.7, H16 in no bead
     def shared(line, tokens):
@@ -346,12 +354,12 @@ def test_ff_map_bead_sasa(tmp_path):
                                                     tmp_path / "shared")
     assert "1 atom(s) of GSH are in no bead" in proc.stdout and "H16" in proc.stdout
     assert np.allclose(shared_sasa, sasa) # the molecule does not depend on the mapping
-    gained = modified["1_AMD1"] - full["1_AMD1"]
-    assert np.allclose(gained, full["1_SUL1"] - modified["1_SUL1"]) # half of C6 moved, despite 0.3/0.7
+    gained = modified["AMD1"] - full["AMD1"]
+    assert np.allclose(gained, full["SUL1"] - modified["SUL1"]) # half of C6 moved, despite 0.3/0.7
     assert np.any(gained > 0)
-    for bead in ("1_CAC1", "1_AMC1", "1_CAC2"):
+    for bead in ("CAC1", "AMC1", "CAC2"):
         assert np.allclose(modified[bead], full[bead])
-    lost = full["1_AMD2"] - modified["1_AMD2"] # H16
+    lost = full["AMD2"] - modified["AMD2"] # H16
     assert np.all(lost >= -1e-12)
     assert np.allclose(sum(modified.values()) + lost, sasa)
 
@@ -364,6 +372,9 @@ def test_ff_map_bead_sasa(tmp_path):
     assert "No SASA assigned to the dummy bead(s) 1_VS1" in proc.stdout
     assert "in no bead" not in proc.stdout
     assert sorted(vs) == sorted(full) # no file for VS1
+    # the bead table lists VS1 as a dummy at its position (the last bead of the mapping)
+    table = (tmp_path / "vs" / "GSH_sasa_beads.dat").read_text().splitlines()
+    assert table[-1] == "7  VS1  dummy  -"
     assert np.allclose(vs_sasa, sasa)
     for bead in full:
         assert np.allclose(vs[bead], full[bead])
@@ -399,11 +410,26 @@ def test_cg_bead_sasa_skip_dummies():
         MoleculeSASA(atoms, "GSH", cg=True).cg_bead_sasa(block)
 
 
+def _gsh_itp(path, edit):
+    """GSH.itp with the [ atoms ] lines (tokens) passed through ``edit``."""
+    lines, in_atoms = [], False
+    for line in Path(GSH_ITP_OUTPUT).read_text().splitlines():
+        if line.startswith("["):
+            in_atoms = line.split()[1] == "atoms"
+        elif in_atoms and line.strip() and not line.startswith(";"):
+            line = " ".join(edit(line.split()))
+        lines.append(line)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
 @needs_data
-def test_ff_assess_sasa_without_bead_references(tmp_path):
+def test_ff_assess_bead_matching(tmp_path):
     """
-    A reference without bead files (e.g. from an older ff_map) still assesses the
-    molecule; the beads are skipped with a warning.
+    ff_assess matches the beads to the reference by their position within the molecule
+    (bead table of ff_map), whatever the resids and names of the CG itp; a renamed bead
+    or a different number of beads is warned about, and a reference without bead table
+    still assesses the molecule.
     """
     ref = tmp_path / "ref"
     shutil.copytree(GSH_ASSESS_REFERENCE, ref)
@@ -412,19 +438,48 @@ def test_ff_assess_sasa_without_bead_references(tmp_path):
               '-mols', 'LIG:GSH', '-o', 'mapped.xtc', '-sasa', str(ref)]
     proc = subprocess.run(ff_map, cwd=tmp_path, timeout=600, capture_output=True, text=True, env=ENV)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    for bead_file in ref.glob("GSH_1_*_sasa*.dat"):
-        bead_file.unlink()
 
-    ff_assess = [sys.executable, '-m', 'fast_forward.bin.ff_assess',
-                 '-f', str(GSH_ASSESS_TRAJ), '-s', str(GSH_ASSESS_TPR), '-i', str(GSH_ITP_OUTPUT),
-                 '-d', str(ref), '-interactions-only', '-sasa', '-plots', str(tmp_path)]
-    proc = subprocess.run(ff_assess, cwd=tmp_path, timeout=600, capture_output=True, text=True, env=ENV)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "No reference SASA for the bead(s) 1_CAC1, 1_AMC1" in proc.stdout
-    report = (tmp_path / "report_sasa.out").read_text()
-    assert "GSH" in report and "Bead SASA" not in report
-    assert (tmp_path / "sasa_distributions.png").is_file()
-    assert not (tmp_path / "sasa_bead_distributions_GSH.png").exists()
+    def assess(name, itp=GSH_ITP_OUTPUT, reference=ref):
+        run_dir = tmp_path / name
+        run_dir.mkdir()
+        ff_assess = [sys.executable, '-m', 'fast_forward.bin.ff_assess',
+                     '-f', str(GSH_ASSESS_TRAJ), '-s', str(GSH_ASSESS_TPR), '-i', str(itp),
+                     '-d', str(reference), '-interactions-only', '-sasa']
+        proc = subprocess.run(ff_assess, cwd=run_dir, timeout=600, capture_output=True, text=True, env=ENV)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        report = (run_dir / "report_sasa.out").read_text()
+        assert "GSH" in report # the molecule is always assessed
+        bead_part = report.split(" [ Bead SASA of GSH ]")[1] if "Bead SASA" in report else ""
+        matches = [SASA_LINE.match(line) for line in bead_part.splitlines()]
+        return proc.stdout, [m.group(1) for m in matches if m]
+
+    # PDB-like resids, with a gap: the beads are still found, named as in the itp
+    renumbered = _gsh_itp(tmp_path / "renumbered.itp",
+                          lambda t: t[:2] + ["101" if int(t[0]) <= 3 else "205"] + t[3:])
+    stdout, beads = assess("renumbered", renumbered)
+    assert beads == ["101_CAC1", "101_AMC1", "101_AMD1", "205_SUL1", "205_AMD2", "205_CAC2"]
+    assert "WARNING" not in stdout
+
+    # a bead named differently from the mapping: warned about, still assessed by position
+    renamed = _gsh_itp(tmp_path / "renamed.itp", lambda t: t[:4] + (["CX2"] if t[4] == "CAC2" else t[4:5]) + t[5:])
+    stdout, beads = assess("renamed", renamed)
+    assert "named differently (6: itp CX2, mapping CAC2)" in stdout
+    assert len(beads) == 6 and "1_CX2" in beads
+
+    # a reference with another number of beads: no bead is assessed
+    fewer = tmp_path / "ref_fewer"
+    shutil.copytree(ref, fewer)
+    table = fewer / "GSH_sasa_beads.dat"
+    table.write_text("\n".join(table.read_text().splitlines()[:-1]) + "\n")
+    stdout, beads = assess("fewer", reference=fewer)
+    assert "The CG itp has 6 beads for GSH, but the reference" in stdout and "has 5" in stdout
+    assert beads == []
+
+    # a reference without bead table (e.g. from an older ff_map): no bead is assessed
+    (ref / "GSH_sasa_beads.dat").unlink()
+    stdout, beads = assess("no_table")
+    assert "No bead table" in stdout and "Rerun 'ff_map -sasa'" in stdout
+    assert beads == []
 
 
 def test_score_sasa_invalid():

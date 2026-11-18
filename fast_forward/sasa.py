@@ -15,13 +15,17 @@ distributions (``<prefix><molname>_sasa.dat`` and ``<prefix><molname>_sasa_distr
 so the reference SASA lives next to the reference bonded distributions.
 
 The SASA is also split over the beads (``<prefix><molname>_<resid>_<bead>_sasa[_distr].dat``):
-``ff_map`` assigns the SASA of every atom to the beads of the mapping (an atom shared by k
-beads gives 1/k to each), leaving out dummy beads, i.e. beads whose atoms all belong to
-other beads; ``ff_assess`` takes the SASA of every CG bead, virtual sites included, except
-dummy beads (type ``U``, radius 0), which have no SASA.
+``ff_map`` assigns the SASA of every
+atom to the beads of the mapping (an atom shared by k beads gives 1/k to each), leaving out
+dummy beads, i.e. beads whose atoms all belong to other beads; ``ff_assess`` takes the SASA of
+every CG bead, virtual sites included, except dummy beads (type ``U``, radius 0), which have no
+SASA. The bead table ``<prefix><molname>_sasa_beads.dat`` lists every bead (position, name,
+real or dummy, file); ``ff_assess`` matches its beads to those of the reference by their
+position within the molecule (counted from 1), as the bonded interactions, and only checks the
+names, so the file names of the two sides need not agree.
 """
 import argparse
-from collections import ChainMap
+from collections import ChainMap, namedtuple
 from pathlib import Path
 import warnings
 import numpy as np
@@ -31,6 +35,13 @@ from vermouth.citation_parser import citation_formatter, read_bib
 from fast_forward import DATA_PATH
 from fast_forward.interaction_distribution import distribution
 
+
+# a bead of a molecule: position within the molecule (from 1), name for messages
+# (``<resid>_<label>``), label (the bead name of the mapping or the itp atom name), dummy (no SASA)
+Bead = namedtuple('Bead', 'position name label dummy')
+# a row of the bead table: position, label, dummy, file name of the distribution (None for a dummy)
+BeadRow = namedtuple('BeadRow', 'position label dummy file')
+BEAD_TABLE_HEADER = "# position  name  status  file"
 
 REFERENCE = 'reference' # ff_assess -sasa-surface: the frame closest to the mapped structure of ff_map
 FALLBACK_STATISTIC = 'mode' # without a usable mapped structure
@@ -154,6 +165,40 @@ def map_sasa(atom_sasa, beads):
     return bead_sasa, dummy, unassigned
 
 
+def _bead_list(beads):
+    """``<position>:<label>`` of every bead, dummies marked, for messages"""
+    return ", ".join(f"{bead.position}:{bead.label}{' (dummy)' if bead.dummy else ''}" for bead in beads)
+
+
+def read_bead_table(path):
+    """
+    Read a bead table ``<prefix><molname>_sasa_beads.dat`` (see :meth:`MoleculeSASA.save`).
+
+    Returns
+    -------
+    list of BeadRow
+        every bead of the molecule, in the order of the positions 1, 2, ...
+
+    Raises
+    ------
+    ValueError
+        if a line is malformed or the positions are not 1, 2, ...
+    """
+    rows = []
+    with open(path) as table:
+        for lineno, line in enumerate(table, 1):
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            tokens = line.split()
+            if len(tokens) != 4 or tokens[2] not in ("real", "dummy") or not tokens[0].isdigit():
+                raise ValueError(f"{path}, line {lineno}: expected 'position name real|dummy file', got {line.strip()!r}")
+            rows.append(BeadRow(int(tokens[0]), tokens[1], tokens[2] == "dummy",
+                                None if tokens[3] == "-" else tokens[3]))
+    if [row.position for row in rows] != list(range(1, len(rows) + 1)):
+        raise ValueError(f"{path}: the bead positions are not 1, 2, ..., {len(rows)}")
+    return rows
+
+
 class MoleculeSASA:
     """
     SASA of all molecules of one type over a trajectory, computed once with a single
@@ -186,9 +231,13 @@ class MoleculeSASA:
         (n_molecules * n_frames,) SASA of every molecule in every frame (nm^2)
     distribution : np.ndarray
         (n_bins, 2) distribution of :attr:`series`, columns: bin centre (nm^2), probability density
-    bead_names : list of str or None
-        ``<resid>_<bead name>`` of every bead of a molecule (without the beads left out), after
+    beads : list of Bead or None
+        every bead of a molecule, dummies included, in the order of the molecule, after
         :meth:`map_to_beads` or :meth:`cg_bead_sasa`
+    bead_names : list of str or None
+        ``<resid>_<bead name>`` of every bead with SASA (without the dummies), for messages
+    bead_positions : list of int or None
+        position within the molecule (from 1) of every bead with SASA
     bead_series : np.ndarray or None
         (n_beads, n_molecules * n_frames) SASA of every bead, the molecules concatenated
         as for :attr:`series`
@@ -213,7 +262,7 @@ class MoleculeSASA:
 
         self.series = results.body_sasa.ravel() # (n_molecules * n_frames,) SASA of every molecule in every frame
         self.distribution = distribution(self.series, 'sasa', mol_name) 
-        self.bead_names = self.bead_series = self.bead_distributions = None
+        self.beads = self.bead_series = self.bead_distributions = None
         self.molecule_beads = None # (AA) bead indices in the mapped universe of every molecule, from map_to_beads
 
     @property
@@ -225,36 +274,59 @@ class MoleculeSASA:
         """``<outdir>/<prefix><mol_name>_<suffix>``"""
         return Path(outdir) / f"{self.prefix}{self.mol_name}_{suffix}"
 
+    @property
+    def bead_names(self):
+        return None if self.beads is None else [bead.name for bead in self.beads if not bead.dummy]
+
+    @property
+    def bead_positions(self):
+        return None if self.beads is None else [bead.position for bead in self.beads if not bead.dummy]
+
+    def bead_file_name(self, bead, suffix, outdir="."):
+        """``<outdir>/<prefix><mol_name>_<resid>_<bead name>_<suffix>`` of a :class:`Bead`"""
+        return self.file_name(f"{bead.name}_{suffix}", outdir)
+
     def save(self, dir):
         """
-        Save the time series and distribution of the whole molecule and for each bead.
+        Save the time series and distribution of the whole molecule and of every bead
+        (``<prefix><mol_name>_<resid>_<bead name>_sasa[_distr].dat``), and the bead table
+        ``<prefix><mol_name>_sasa_beads.dat``: one line per bead, dummies included, with
+        its position, name, status (real or dummy) and distribution file.
         """
         np.savetxt(self.file_name("sasa.dat", dir), self.series)
         np.savetxt(self.file_name("sasa_distr.dat", dir), self.distribution)
-        if self.bead_series is not None:
-            for name, series, distr in zip(self.bead_names, self.bead_series, self.bead_distributions):
-                np.savetxt(self.file_name(f"{name}_sasa.dat", dir), series)
-                np.savetxt(self.file_name(f"{name}_sasa_distr.dat", dir), distr)
+        if self.beads is None:
+            return
+        real_beads = [bead for bead in self.beads if not bead.dummy]
+        for bead, series, distr in zip(real_beads, self.bead_series, self.bead_distributions):
+            np.savetxt(self.bead_file_name(bead, "sasa.dat", dir), series)
+            np.savetxt(self.bead_file_name(bead, "sasa_distr.dat", dir), distr)
+        with open(self.file_name("sasa_beads.dat", dir), "w") as table:
+            table.write(BEAD_TABLE_HEADER + "\n")
+            for bead in self.beads:
+                file = "-" if bead.dummy else self.bead_file_name(bead, "sasa_distr.dat").name
+                table.write(f"{bead.position}  {bead.label}  {'dummy' if bead.dummy else 'real'}  {file}\n")
 
     def _molecule_rows(self):
         """Rows of the atom SASA (positions in ag) of the atoms of every molecule."""
         molecules = self.sasa.results.atom_body # (n_atoms,) molecule (body) of every atom
         return [np.flatnonzero(molecules == m) for m in range(self.sasa.n_bodies)]
 
-    def _set_bead_sasa(self, names, sasa_per_molecule):
+    def _set_bead_sasa(self, beads, sasa_per_molecule):
         """
-        Store the SASA of the beads, (n_beads, n_frames) for every molecule, and free the
-        SASA of the atoms.
+        Store the beads and their SASA, (n_beads without dummies, n_frames) for every
+        molecule, and free the SASA of the atoms.
         """
-        self.bead_names = list(names)
+        self.beads = list(beads)
+        names = self.bead_names
         n_frames = len(self.series) // max(1, self.sasa.n_bodies)
         self.bead_series = (np.concatenate(sasa_per_molecule, axis=1) if sasa_per_molecule
                             else np.zeros((len(names), n_frames))) # (n_beads, n_molecules * n_frames) one row per bead, the molecules concatenated
         self.bead_distributions = [distribution(series, 'sasa', f"{self.mol_name} {name}")
-                                   for name, series in zip(self.bead_names, self.bead_series)]
+                                   for name, series in zip(names, self.bead_series)]
         self.sasa.results.atom_sasa = None # the SASA of the atoms is no longer needed
 
-    def map_to_beads(self, mapped_atoms, cg_universe):
+    def map_to_beads(self, mapped_atoms, cg_universe, bead_labels=None):
         """
         Split the SASA of the atoms (AA) over the beads of the mapping, molecule by molecule.
 
@@ -262,8 +334,9 @@ class MoleculeSASA:
         by k of the remaining beads gives 1/k of its SASA to each of them. Dummy beads, i.e.
         beads whose atoms all belong to other beads (see :func:`map_sasa`), get no SASA
         and are left out. Atoms in no bead count for the
-        molecule only; a warning reports them. Beads are named ``<resid>_<bead name>``, the residue counted from 1
-        within the molecule, as the atoms of the CG itp in ``ff_inter`` and ``ff_assess``.
+        molecule only; a warning reports them. Every bead keeps its position within the
+        molecule (from 1, dummies included), by which ``ff_assess`` matches it to the beads
+        of the CG itp; its label is the bead name of the mapping (``bead_labels``).
 
         Parameters
         ----------
@@ -271,6 +344,10 @@ class MoleculeSASA:
             AA atom (universe) indices of every bead
         cg_universe : MDAnalysis.Universe
             the mapped universe, bead i built from the AA atoms ``mapped_atoms[i]``
+        bead_labels : dict, optional
+            {name in the mapped universe: bead name}, e.g. the CGsmiles fragment name of a
+            bead (named ``<fragment name><node index>`` in the mapped universe); names not in
+            it are used as they are
 
         Raises
         ------
@@ -298,7 +375,8 @@ class MoleculeSASA:
         # every bead of every molecule, dummies included (write_mapped_structure)
         self.molecule_beads = [[bdx for bdx, _ in beads] for beads in mol_beads]
 
-        names, sasa_per_molecule, n_unassigned, unassigned_names = None, [], 0, {}
+        bead_labels = bead_labels or {}
+        mol_table, sasa_per_molecule, n_unassigned, unassigned_names = None, [], 0, {}
         for m, beads in enumerate(mol_beads):
             bdxs = [bdx for bdx, _ in beads]
             # SASA of the atoms of this molecule, split over its beads (dummies get none)
@@ -308,19 +386,19 @@ class MoleculeSASA:
             
             bead_sasa, dummy, unassigned = map_sasa(self.sasa.results.atom_sasa[rows], [local[r] for _, r in beads])
             resindices = cg_universe.atoms.resindices[bdxs] if bdxs else np.zeros(0, dtype=int)
-            all_names = [f"{res - resindices.min() + 1}_{cg_universe.atoms[bdx].name}"
-                         for bdx, res in zip(bdxs, resindices)]
-            mol_names = [name for name, d in zip(all_names, dummy) if not d]
-            if names is None:
-                names = mol_names
-                skipped = [name for name, d in zip(all_names, dummy) if d]
+            labels = [bead_labels.get(name, name) for name in cg_universe.atoms[bdxs].names] if bdxs else []
+            table = [Bead(position, f"{res - resindices.min() + 1}_{label}", label, bool(d))
+                     for position, (res, label, d) in enumerate(zip(resindices, labels, dummy), 1)]
+            if mol_table is None:
+                mol_table = table
+                skipped = [bead.name for bead in table if bead.dummy]
                 if skipped:
                     print(f"INFO - No SASA assigned to the dummy bead(s) {', '.join(skipped)} of "
                           f"{self.mol_name}: all their atoms belong to other beads")
-            elif mol_names != names:
+            elif table != mol_table:
                 raise ValueError(f"All {self.mol_name} molecules must have the same beads in the same order "
-                                 f"for the bead SASA: molecule 1 has {', '.join(names)}, molecule {m + 1} has "
-                                 f"{', '.join(mol_names)}.")
+                                 f"for the bead SASA: molecule 1 has {_bead_list(mol_table)}, molecule {m + 1} "
+                                 f"has {_bead_list(table)}.")
             sasa_per_molecule.append(bead_sasa)
             n_unassigned += len(unassigned)
             for atom in ag[rows[unassigned]]:
@@ -330,7 +408,7 @@ class MoleculeSASA:
             more = f" and {len(listed) - 10} more" if len(listed) > 10 else ""
             print(f"WARNING - {n_unassigned} atom(s) of {self.mol_name} are in no bead of the mapping; their "
                   f"SASA counts for the molecule but not for any bead: {', '.join(listed[:10])}{more}")
-        self._set_bead_sasa(names or [], sasa_per_molecule)
+        self._set_bead_sasa(mol_table or [], sasa_per_molecule)
 
     def cg_bead_sasa(self, block):
         """
@@ -346,8 +424,9 @@ class MoleculeSASA:
         ValueError
             if a molecule has a different number of beads than ``block``
         """
-        nodes = list(block.nodes) # atoms from ff block
-        all_names = [f"{block.nodes[node]['resid']}_{block.nodes[node]['atomname']}" for node in nodes] 
+        nodes = list(block.nodes) # atoms from ff block, in the order of the molecule
+        labels = [block.nodes[node]['atomname'] for node in nodes]
+        all_names = [f"{block.nodes[node]['resid']}_{label}" for node, label in zip(nodes, labels)]
         molecule_rows = self._molecule_rows() # indices of the molecules in ag/sasa array
 
         # check that all molecules have the same number of beads as the block, and get the radii of the beads
@@ -365,8 +444,8 @@ class MoleculeSASA:
                   f"{self.mol_name}")
 
         # save the sasa of the remaining beads in the class attributes
-        self._set_bead_sasa([all_names[i] for i in keep],
-                        [self.sasa.results.atom_sasa[rows[keep]] for rows in molecule_rows])
+        beads = [Bead(i + 1, all_names[i], labels[i], i not in keep) for i in range(len(nodes))]
+        self._set_bead_sasa(beads, [self.sasa.results.atom_sasa[rows[keep]] for rows in molecule_rows])
 
     def write_surface(self, outdir=".", reference=None, statistic=FALLBACK_STATISTIC):
         """

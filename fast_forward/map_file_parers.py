@@ -23,6 +23,8 @@ class Mapping():
         self.atom_weights = defaultdict(list) 
         self.bead_to_idx = defaultdict(list) 
         self.bead_to_atom = defaultdict(list)
+        # {bead: plain bead name} where the bead key is not the name itself (CGsmiles: <fragment name><node index>)
+        self.bead_labels = {}
 
     def add_atom(self, bead, idx, atom=None, weight=None):
         self.bead_to_atom[bead].append(atom)
