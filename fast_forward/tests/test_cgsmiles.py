@@ -22,7 +22,8 @@ import pysmiles
 import pytest
 from cgsmiles.resolve import MoleculeResolver
 
-from fast_forward.cgsmiles import (_annotate_vs, _collect_bead_data, _copy_offsets,
+from fast_forward.cgsmiles import (_annotate_vs, _check_contiguous_residues,
+                                   _collect_bead_data, _copy_offsets,
                                    _first_atom_by_molnum, _resolve_cg_match,
                                    cgsmiles_to_mapping)
 from fast_forward.universe_handler import ResidueIter
@@ -241,9 +242,9 @@ def test_interleaved_molecules_map_their_own_atoms():
     # atoms of each molecule in the topology
     molnums = univ.atoms.molnums
     atoms_of = [set(np.flatnonzero(molnums == m).tolist()) for m in range(len(layout))]
-    # beads come per molecule type: ETH copy 1, ETH copy 2, then PEO
-    beads_per_copy = [list(mapped_atoms[0:3]), list(mapped_atoms[3:6]), list(mapped_atoms[6:10])]
-    for molnum, beads in zip([0, 2, 1], beads_per_copy):
+    # beads come in topology order: ETH (3 beads), PEO (4 beads), ETH (3 beads)
+    beads_per_copy = [list(mapped_atoms[0:3]), list(mapped_atoms[3:7]), list(mapped_atoms[7:10])]
+    for molnum, beads in zip([0, 1, 2], beads_per_copy):
         mapped = set().union(*(set(bead) for bead in beads))
         assert mapped == atoms_of[molnum]
     assert len(bead_idxs) == 10
@@ -346,19 +347,21 @@ def test_wvs_not_a_number_raises():
         _resolve_cg_match(cgs_str, mol)
 
 
-def test_collect_bead_data_rejects_split_residues():
+def test_check_contiguous_residues_rejects_split_residues():
     """Beads of one residue that are not contiguous are rejected."""
-    cg, _, match = _resolve_cg_match(PEO_3LEVEL.format(n=1), _capped_peo(1))
+    cg, _, _ = _resolve_cg_match(PEO_3LEVEL.format(n=1), _capped_peo(1))
     cg.nodes[2]["resid"] = cg.nodes[0]["resid"]
     with pytest.raises(ValueError, match="not contiguous"):
-        _collect_bead_data(cg, match, [0], 0, ResidueIter())
+        _check_contiguous_residues(cg)
 
 
-def test_resolve_two_level_unchanged():
+def test_resolve_two_level_one_residue():
     """
-    Strings without a residue level do not go through residue annotation.
+    Strings without a residue level make the whole molecule one residue with
+    the default resname.
     """
     cgs_str = "{[#C][#EC]|3[#C]}.{#EC=[$]COC[$],#C=[$]C}"
     cg, _, match = _resolve_cg_match(cgs_str, _capped_peo(3))
     assert match
-    assert all("resname" not in cg.nodes[bead] for bead in cg.nodes)
+    assert all(cg.nodes[bead]["resname"] == "RES" for bead in cg.nodes)
+    assert all(cg.nodes[bead]["resid"] == 1 for bead in cg.nodes)
