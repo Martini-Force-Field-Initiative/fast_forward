@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import Counter
+from collections import Counter, namedtuple
 import numpy as np
 import numba
 import networkx as nx
@@ -127,7 +127,7 @@ def get_mappings(cg, univ, _match, mappings):
     Builds the mapping objects of a matched molecule. The CG graph is not
     changed.
 
-    Every CG node must have a resname and resid (set by _resolve_cg_match).
+    Every CG node must have a resname and resid (set by _match_resolved).
     Each resname gets one Mapping, filled from the first residue with that
     name; the beads are named fragname + bead index.
 
@@ -330,29 +330,38 @@ def _order_by_bead_index(cg):
     return ordered
 
 
-def _resolve_cg_match(cgs_str, mol_graph, resname_default="RES"):
-    """
-    Resolves a cgsmiles string and returns the matched (cg, aa, match) triple,
-    or None if the string does not match mol_graph.
+ResolvedCGS = namedtuple(
+    'ResolvedCGS', ['cgs_str', 'cg', 'aa', 'has_residue_level', 'element_counts']
+)
+ResolvedCGS.__doc__ = """
+The molecule-independent result of resolving one cgsmiles string.
 
-    Every node of the returned CG graph has a resname and resid: from the
-    residue level for strings with three or more levels; otherwise the whole
-    molecule is one residue named resname_default with resid 1.
+cg is shared by every molecule matched with this string and must not be
+modified; _match_resolved works on a copy.
+"""
+
+
+def _element_counts(graph):
+    """Number of atoms per element of a graph."""
+    return Counter(nx.get_node_attributes(graph, 'element').values())
+
+
+def _resolve_cgsmiles(cgs_str):
+    """
+    Resolves a cgsmiles string. Depends only on the string, so it is done
+    once per string and reused for every molecule (see _match_resolved).
+
+    For strings with three or more levels, the CG nodes get resname and resid
+    from the residue level. Virtual sites are annotated.
 
     Parameters
     ----------
     cgs_str: str
         A cgsmiles string encoding the CG mapping.
-    mol_graph: networkx.Graph
-        The all-atom molecule graph to match against.
-    resname_default: str
-        Resname for strings without a residue level. Should be unique per
-        molecule type (e.g. the molecule name), otherwise the mappings of
-        different molecules are merged under one resname.
 
     Returns
     -------
-    tuple[networkx.Graph, networkx.Graph, dict] or None
+    ResolvedCGS
     """
     resolver = MoleculeResolver.from_string(cgs_str, last_all_atom=True)
     if resolver.resolutions < 1:
@@ -365,18 +374,59 @@ def _resolve_cg_match(cgs_str, mol_graph, resname_default="RES"):
     metas = [meta for meta, _ in resolver.resolve_iter()]
     cg, aa = resolver.meta_graph, resolver.molecule
 
-    if len(metas) > 1:
+    has_residue_level = len(metas) > 1
+    if has_residue_level:
         _annotate_residues(cg, metas[-2])
-    else:
+
+    _annotate_vs(cg)
+    return ResolvedCGS(cgs_str, cg, aa, has_residue_level, _element_counts(aa))
+
+
+def _match_resolved(resolved, mol_graph, resname_default="RES"):
+    """
+    Matches a resolved cgsmiles string against a molecule graph and returns
+    the (cg, aa, match) triple, or None if they do not match.
+
+    Every node of the returned CG graph has a resname and resid: from the
+    residue level for strings with three or more levels; otherwise the whole
+    molecule is one residue named resname_default with resid 1.
+    The returned cg is a copy; resolved is not modified.
+
+    Parameters
+    ----------
+    resolved: ResolvedCGS
+        Result of _resolve_cgsmiles.
+    mol_graph: networkx.Graph
+        The all-atom molecule graph to match against.
+    resname_default: str
+        Resname for strings without a residue level. Should be unique per
+        molecule type (e.g. the molecule name), otherwise the mappings of
+        different molecules are merged under one resname.
+
+    Returns
+    -------
+    tuple[networkx.Graph, networkx.Graph, dict] or None
+    """
+    aa = resolved.aa
+    
+    # cheap rejection before the graph matching
+    if len(aa) != len(mol_graph):
+        return None
+    if resolved.element_counts != _element_counts(mol_graph):
+        return None
+
+    match = find_one_graph_match(aa, mol_graph)
+    if not match:
+        return None
+
+    # the resolved graph is shared between molecules: annotate a copy.
+    # Node attribute dicts are copied; the bead graphs are only read.
+    cg = resolved.cg.copy()
+    if not resolved.has_residue_level:
         # no residue level: the whole molecule is one residue
         for node in cg.nodes:
             cg.nodes[node]["resname"] = resname_default
             cg.nodes[node]["resid"] = 1
-
-    _annotate_vs(cg)
-    match = find_one_graph_match(aa, mol_graph)
-    if not match:
-        return None
     # reorder last: residue annotation relies on the original node labels.
     # Only after a match, so non-matching candidate strings are not validated.
     cg = _order_by_bead_index(cg)
@@ -493,14 +543,6 @@ def _collect_bead_data(cg, match, offsets, bead_count, res_iter):
     return mapped_atoms, weights, bead_idxs, bead_count, res_iter
 
 
-def _resolve_all_atom(cgs_str):
-    """Returns the all-atom graph of a cgsmiles string."""
-    resolver = MoleculeResolver.from_string(cgs_str, last_all_atom=True)
-    for _ in resolver.resolve_iter():
-        pass
-    return resolver.molecule
-
-
 def _counter_diff(string_counts, topology_counts):
     """Keys whose counts differ, as (key, string count, topology count)."""
     keys = sorted(set(string_counts) | set(topology_counts), key=str)
@@ -585,12 +627,18 @@ def _no_match_report(candidates, mol_graph, univ):
     """
     Explanation for a molecule that no cgsmiles string matches, based on the
     candidate string closest to the molecule.
+
+    Parameters
+    ----------
+    candidates: list[ResolvedCGS]
+    mol_graph: networkx.Graph
+    univ: :class:`fast_forward.universe_handler.UniverseHandler`
     """
     atom_names = {node: univ.atoms[node].name for node in mol_graph.nodes}
     scored = []
-    for cgs_str in candidates:
-        score, lines = _describe_mismatch(_resolve_all_atom(cgs_str), mol_graph, atom_names)
-        scored.append((score, cgs_str, lines))
+    for resolved in candidates:
+        score, lines = _describe_mismatch(resolved.aa, mol_graph, atom_names)
+        scored.append((score, resolved.cgs_str, lines))
     score, cgs_str, lines = min(scored, key=lambda item: item[0])
     if len(candidates) == 1:
         header = f"cgsmiles string: {cgs_str}"
@@ -646,15 +694,21 @@ def cgsmiles_to_mapping(univ, cgsmiles_strs, mol_names, mol_matching=True):
     # (first atom index, molecule name, offset) of every molecule copy
     copies = []
 
+    # resolving is the expensive step and depends only on the string, so each
+    # distinct string is resolved once and reused for every molecule type
+    resolved_strs = {cgs_str: _resolve_cgsmiles(cgs_str)
+                     for cgs_str in dict.fromkeys(cgsmiles_strs)}
+
     for idx, mol_name in enumerate(mol_names):
         mol_graph = univ.molecule_graphs[mol_name]
-        candidates = [cgsmiles_strs[idx]] if mol_matching else cgsmiles_strs
+        candidates = [cgsmiles_strs[idx]] if mol_matching else list(resolved_strs)
+        candidates = [resolved_strs[cgs_str] for cgs_str in candidates]
 
         # Find the first cgsmiles string that matches this molecule
         resolved = None
-        for cgs_str in candidates:
+        for candidate in candidates:
             # without a residue level, name the residue after the molecule
-            resolved = _resolve_cg_match(cgs_str, mol_graph, resname_default=mol_name)
+            resolved = _match_resolved(candidate, mol_graph, resname_default=mol_name)
             if resolved is not None:
                 break
         if resolved is None:

@@ -24,14 +24,19 @@ from cgsmiles.resolve import MoleculeResolver
 
 from fast_forward.cgsmiles import (_annotate_vs, _check_contiguous_residues,
                                    _collect_bead_data, _copy_offsets,
-                                   _first_atom_by_molnum, _resolve_cg_match,
-                                   cgsmiles_to_mapping)
+                                   _first_atom_by_molnum, _match_resolved,
+                                   _resolve_cgsmiles, cgsmiles_to_mapping)
 from fast_forward.universe_handler import ResidueIter
 
 # methyl-capped PEO: CH3ter-(EO)n-CH3ter, residue level on top
 PEO_3LEVEL = ("{{[#CH3ter][#EO]|{n}[#CH3ter]}}."
               "{{#EO=[$][#EC][$],#CH3ter=[$][#C]}}."
               "{{#EC=[$]COC[$],#C=[$]C}}")
+
+
+def _resolve_cg_match(cgs_str, mol_graph, resname_default="RES"):
+    """Resolves a cgsmiles string and matches it against mol_graph."""
+    return _match_resolved(_resolve_cgsmiles(cgs_str), mol_graph, resname_default)
 
 
 def _capped_peo(n):
@@ -365,3 +370,45 @@ def test_resolve_two_level_one_residue():
     assert match
     assert all(cg.nodes[bead]["resname"] == "RES" for bead in cg.nodes)
     assert all(cg.nodes[bead]["resid"] == 1 for bead in cg.nodes)
+
+
+def test_each_string_resolved_once(monkeypatch):
+    """
+    With unordered matching, every molecule type is tried against every
+    string, but each distinct string is resolved only once.
+    """
+    import fast_forward.cgsmiles as cgsmiles_module
+    calls = []
+    original = cgsmiles_module.MoleculeResolver.from_string
+
+    def counting_from_string(cgs_str, *args, **kwargs):
+        calls.append(cgs_str)
+        return original(cgs_str, *args, **kwargs)
+
+    monkeypatch.setattr(cgsmiles_module.MoleculeResolver, "from_string",
+                        counting_from_string)
+    univ = _fake_universe([("ETH", _capped_peo(1)), ("PEO", _capped_peo(2)),
+                           ("PEO3", _capped_peo(3))])
+    cgs_strs = ["{[#C][#EC]|3[#C]}.{#EC=[$]COC[$],#C=[$]C}",
+                "{[#C][#EC]|2[#C]}.{#EC=[$]COC[$],#C=[$]C}",
+                "{[#C][#EC][#C]}.{#EC=[$]COC[$],#C=[$]C}",
+                "{[#C][#EC][#C]}.{#EC=[$]COC[$],#C=[$]C}"]
+    _, bead_idxs, _, _, _ = cgsmiles_to_mapping(
+        univ, cgs_strs, ["ETH", "PEO", "PEO3"], mol_matching=False)
+
+    assert sorted(calls) == sorted(set(cgs_strs))
+    assert len(bead_idxs) == 3 + 4 + 5
+
+
+def test_shared_string_keeps_resnames_apart():
+    """
+    One two-level string that matches two molecule types gives each its own
+    resname; the shared resolved graph is not modified per molecule.
+    """
+    univ = _fake_universe([("ETH", _capped_peo(1)), ("ETX", _capped_peo(1))])
+    cgs_str = "{[#C][#EC][#C]}.{#EC=[$]COC[$],#C=[$]C}"
+    _, _, mappings, _, res_iter = cgsmiles_to_mapping(
+        univ, [cgs_str], ["ETH", "ETX"], mol_matching=False)
+
+    assert set(mappings) == {"ETH", "ETX"}
+    assert [res.resname for res in res_iter.res_iter()] == ["ETH", "ETX"]
