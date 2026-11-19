@@ -15,104 +15,13 @@ from fast_forward.itp_to_ag import ITPInteractionMapper
 from fast_forward.itp_parser_sub import read_itp
 from fast_forward.interaction_plots import make_distribution_plot, make_matrix_plot, make_distances_distribution_plot
 from fast_forward.score import hellinger, score_matrix, calc_score
+from fast_forward.sasa import REFERENCE, surface_statistic
+from fast_forward.sasa_assessment import assess_sasa
+from fast_forward.report import report_interactions, report_distances
 from collections import defaultdict
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
 
-def report_interactions(h_score_dict, score_dict, exclude_outliers=False):
-    """
-    Print out a report of the interaction.
-
-    Parameters
-    ----------
-    score_dict : dict
-        Dictionary with interaction types as keys and another dictionary as values.
-    exclude_outliers : bool, optional
-        Whether to exclude outliers (scores >= 0.5) from the overall score calculation, defaults to False
-    """
-
-    buff = ''
-
-    buff += " [ Interaction Distribution Report ]\n"
-    buff += f"   Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
-
-    buff += " Interaction Scores:\n"
-    buff += " 0 - identical, 1 - no overlap\n\n"
-
-    buff += " Score guide:\n"
-    buff += "   0.0-0.3 : good\n"
-    buff += "   0.3-0.5 : ok\n"
-    buff += "   0.5-1.0 : bad\n\n"
-    buff += "\t\tHellinger distance (Scoring function)\n"
-
-
-    if exclude_outliers:
-        buff += "\n\tNB: values over 0.5 have been excluded from the above summary value\n\n"
-    else:
-        buff += '\n'
-
-    overall_scores = []
-    for interaction_type in h_score_dict.keys():
-        buff += f" {interaction_type} \n"
-        for atom_group, h_score in h_score_dict[interaction_type].items():
-            score = score_dict[interaction_type][atom_group]
-            if exclude_outliers and h_score >= 0.5: # arbitrary cutoff for now
-                buff += f"\t{atom_group:20s}: {h_score:.2f} ({score:.2f})(excluded)\n"
-            else:
-                buff += f"\t{atom_group:20s}: {h_score:.2f} ({score:.2f})\n"
-                overall_scores.append(score)
-        buff += '\n'
-
-    printable = buff.format(mean=np.array(overall_scores).mean(),
-                            sem=np.array(overall_scores).std()/np.sqrt(len(overall_scores))
-                            )
-
-    print(printable)
-    with open('report_interactions.out', 'w') as fout:
-        fout.writelines(printable)
-
-
-def report_distances(score_matrix, molname, atom_names):
-    """
-    Print out a report of the distance score matrix.
-
-    Parameters
-    ----------
-    score_matrix : np.ndarray
-        Score matrix for pairwise distances.
-    molname : str
-        Name of the molecule.
-    atom_names : list of str
-        List of atom names corresponding to the score matrix.
-    """
-    score_matrix_report = np.vstack([atom_names, score_matrix])
-    score_matrix_report = np.column_stack([[''] + atom_names, score_matrix_report])
-    buff = ''
-    buff += f" [ Distance Distribution Report for {molname} ]\n "
-    buff += f" Overall Score : {{mean:.3}} ± {{sem:.3}}\n\n"
-    buff += f"   Max Score : {{max:.2f}}\n\n"
-    buff += " Score guide:\n"
-    buff += "   0.0-0.3 : good\n"
-    buff += "   0.3-0.5 : ok\n"
-    buff += "   0.5-1.0 : bad\n"
-    buff += "\n   Score Matrix:\n"
-    buff += " 0 - identical, 1 - no overlap\n\n"
-
-    for i, row in enumerate(score_matrix_report):
-        if i == 0:
-            buff += "" + " ".join(f"{name:>5}" for name in row) + "\n" # Header row
-        else:
-            buff += f"{row[0]:>5} " + " ".join(f"{float(score):>5.2f}" for score in row[1:]) + "\n" # First element is the atom name, rest are scores
-
-    off_diag = score_matrix[~np.eye(score_matrix.shape[0], dtype=bool)] # Exclude diagonal (0) for mean and std calculation
-    sem = np.std(off_diag, ddof=1) / np.sqrt(len(off_diag)) # Standard error of the mean
-    printable = buff.format(molname=molname,
-                            mean=np.mean(off_diag),
-                            sem=sem,
-                            max=np.max(score_matrix))
-    print(printable)
-    with open('report_distances.out', 'w') as fout:
-        fout.writelines(printable)
 
 def _main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
@@ -128,7 +37,7 @@ def _main():
     parser.add_argument('-outliers', default=False, action='store_true', dest='exclude_outliers',
                         help='exclude outliers from overall score')
     parser.add_argument('-plot-data', default=False, action='store_true', dest="plot_data",
-                        help='save data for making plots as single pickle file')
+                        help='save data for making plots as single pickle file (implies -plots)')
     parser.add_argument('-score-weight', dest='hellinger_weight', type=float, default=0.7,
                         help='weight of the Hellinger distance in the distance score')
     parser.add_argument('-include-constraints', default=False, action='store_true', dest='include_constraints',
@@ -139,8 +48,35 @@ def _main():
     parser.add_argument('-interactions-only', default=False, action='store_true', dest='interactions_only',
                         help="Only assess bonded interaction distributions (bonds, angles, dihedrals); skip "
                              "the pairwise distance assessment entirely.")
+    parser.add_argument('-sasa', default=False, action='store_true', dest='sasa',
+                        help="Assess the solvent accessible surface area (SASA) of every molecule with sassy "
+                             "(Martini bead radii from the bead types) against the reference written by "
+                             "'ff_map -sasa' (<prefix><mol>_sasa_distr.dat in the -d directory), and that of every bead "
+                             "except dummy beads of type U against the bead references of 'ff_map -sasa' "
+                             "(<prefix><mol>_<resid>_<bead>_sasa_distr.dat; beads without one are skipped). Requires "
+                             "-s (tpr) and -i. With -dists, the CG time series and distributions are saved as well, "
+                             "with -plots, the distributions are plotted (sasa_distributions.png, "
+                             "sasa_bead_distributions_<mol>.png).")
+    parser.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
+                        help="With -sasa: write the CG structure and its surface dots (<prefix><mol>_sasa_dots_CG.pdb, "
+                             "the B-factor is the SASA of the bead) to the -dists path (default: current dir), in "
+                             "the frame chosen by -sasa-stat.")
+    parser.add_argument('-sasa-stat', default=REFERENCE, dest='sasa_stat', metavar='STAT',
+                        type=lambda value: surface_statistic(value, allow_reference=True),
+                        help="With -sasa-surface: 'reference' uses the frame closest to the mapped structure from "
+                             "'ff_map -sasa-surface' (<prefix><mol>_sasa_mapped.pdb in the -d directory), superposed "
+                             "onto it, or, without a matching one, the frame whose SASA is closest to the mode; any "
+                             "other value uses the molecule and frame whose SASA is closest to this statistic of the "
+                             "SASA distribution: median, mean, mode (most probable SASA), q1, q3 (quartiles), min, max, mean+std, mean-std, or a SASA in nm^2")
 
     args = parser.parse_args()
+    # saving the plot data implies making the plots (in the current dir by default)
+    if args.plots is None and args.plot_data:
+        args.plots = "."
+    if args.sasa_surface and not args.sasa:
+        parser.error("-sasa-surface requires -sasa")
+    if args.sasa and not (args.tprfile and args.itp_files):
+        parser.error("-sasa requires -s (tpr, for the molecule types) and -i (itp files)")
 
     distribution_files = glob(f'{args.reference}/*distr.dat')
     # create file map
@@ -207,7 +143,7 @@ def _main():
                         [args.hellinger_weight, 1-args.hellinger_weight], inter_type
                         )
                     score_dict[inter_type][group_name] = score
-                    if args.plot_data:
+                    if args.plots:
                         plot_data[inter_type][group_name] = {"x": reference_data.T[0],
                                                          "Reference": reference_data.T[1],
                                                          'Simulated': probs}
@@ -247,10 +183,18 @@ def _main():
                     if args.plots:
                         make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
                         make_distances_distribution_plot(
-                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
+                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=args.plot_data
                         )
 
                     report_distances(score_m, molname, atom_names)
+
+        # evaluation of the solvent accessible surface area against the references of 'ff_map -sasa'
+        if args.sasa:
+            assess_sasa(u, ff.blocks, file_map, args.reference, prefix=args.prefix,
+                        hellinger_weight=args.hellinger_weight, distribution_data=args.distribution_data,
+                        plots=args.plots, plot_data=args.plot_data, sasa_surface=args.sasa_surface,
+                        sasa_stat=args.sasa_stat)
+
 
 def main():
     try:

@@ -28,8 +28,68 @@ from fast_forward.mapping import create_new_universe, forward_map_positions, for
 from fast_forward.universe_handler import UniverseHandler
 from fast_forward.map_file_parers import read_mapping
 from fast_forward.cgsmiles import cgsmiles_to_mapping, load_cgsmiles_library
+from fast_forward.sasa import MoleculeSASA, FALLBACK_STATISTIC, surface_statistic
 
 VERSION = 'fast_forward version {}'.format(fast_forward.__version__)
+
+def parse_mol_names(entries):
+    """
+    Parse the -mols entries, each ``AA`` or ``AA:CG``: the name of an atomistic molecule
+    to map and, optionally, the name of its CG molecule.
+
+    Parameters
+    ----------
+    entries : list of str
+        -mols entries, e.g. ``['LIG:GSH', 'POPC']``
+
+    Returns
+    -------
+    mol_names : list of str
+        atomistic molecule names, in the order given, e.g. ``['LIG', 'POPC']``
+    cg_names : dict of str to str
+        CG molecule name of every atomistic molecule given as ``AA:CG``, e.g. ``{'LIG': 'GSH'}``
+
+    Raises
+    ------
+    ValueError
+        if an entry is not of the form ``AA`` or ``AA:CG``
+    """
+    mol_names = []
+    cg_names = {}
+    for entry in entries:
+        aa_name, sep, cg_name = entry.partition(':')
+        if not aa_name or (sep and not cg_name) or ':' in cg_name:
+            raise ValueError(f"invalid -mols entry '{entry}': expected AA or AA:CG molecule names")
+        mol_names.append(aa_name)
+        if cg_name:
+            cg_names[aa_name] = cg_name
+    return mol_names, cg_names
+
+def parse_bead_positions(entries):
+    """
+    Parse the bead positions of -sasa-ignore: positions within the molecule, counted from 1,
+    separated by spaces or commas, in one or several arguments (``['1 3 5']``, ``['1', '3,5']``).
+
+    Returns
+    -------
+    list of int
+        the positions, sorted and without duplicates
+
+    Raises
+    ------
+    ValueError
+        if an entry is not a positive integer
+    """
+    positions = set()
+    for entry in entries:
+        for token in entry.replace(',', ' ').split():
+            if not token.isdigit() or int(token) < 1:
+                raise ValueError(f"invalid -sasa-ignore bead position '{token}': expected bead positions "
+                                 "within the molecule, counted from 1 (e.g. -sasa-ignore \"1 3 5\")")
+            positions.add(int(token))
+    if not positions:
+        raise ValueError("-sasa-ignore needs at least one bead position")
+    return sorted(positions)
 
 def main():
     """
@@ -64,7 +124,9 @@ def main():
     mapping_group.add_argument('-pbc', action='store_true', required=False, dest='pbc_complete',
                                help='complete pbc with MDAnalysis; this is slow!')
     mapping_group.add_argument('-mols', dest='mol_names', required=True, type=str, nargs='+',
-                               help='names of molecules to consider when mapping as in the [moleculetypes] directive')
+                               help='names of the atomistic molecules to map, as in the [ moleculetype ] directive of the '
+                                    'atomistic topology (-s). Optionally AA:CG (e.g. LIG:GSH) to also give the name of the '
+                                    'CG molecule, used to name the SASA files of -sasa')
     mapping_group.add_argument('-add_H', dest='h_association', nargs='+', type=lambda s: s.split(':'),
                                 default=[],
                                help='atom-types corresponding to CH3, CH2, CH1 for aliphatic groups and CH2d for double bonds.')
@@ -79,7 +141,52 @@ def main():
     mapping_group.set_defaults(cgsorder='assume yes if passed only with -cgs and no if -cgsl is used')
     mapping_group.add_argument('-lib', dest='library', help='loads library files', default=None)
 
+    sasa_group = parser.add_argument_group('SASA Options')
+    sasa_group.add_argument('-sasa', default=None, const=".", nargs="?", dest="sasa",
+                            help="Calculate the solvent accessible surface area (SASA) of every molecule of the "
+                                 "atomistic trajectory with sassy, and save its time series and distribution "
+                                 "(<prefix><mol>_sasa[_distr].dat, <mol>: the CG molecule name given with -mols AA:CG) "
+                                 "as reference for 'ff_assess -sasa', and that of every bead of the mapping "
+                                 "(<prefix><mol>_<resid>_<bead>_sasa[_distr].dat): the SASA of every atom goes to its "
+                                 "bead, an atom shared by k beads gives 1/k to each; dummy beads (all their atoms in "
+                                 "other beads) are left out. Optionally "
+                                 "provide a path (default: current dir); use the same directory as for "
+                                 "'ff_inter -dists'.")
+    sasa_group.add_argument('-sasa-surface', default=False, action='store_true', dest='sasa_surface',
+                            help="With -sasa: write the atomistic structure and its surface dots of a "
+                                 "representative molecule and frame (SASA closest to -sasa-stat; "
+                                 "<prefix><mol>_sasa_dots_AA.pdb, the B-factor is the SASA of the atom), "
+                                 "and the mapped structure of the same molecule and frame "
+                                 "(<prefix><mol>_sasa_mapped.pdb) to the -sasa path. "
+                                 "'ff_assess -sasa-surface' uses the mapped structure to pick a matching CG frame.")
+    sasa_group.add_argument('-sasa-stat', default=FALLBACK_STATISTIC, type=surface_statistic,
+                            dest='sasa_stat', metavar='STAT',
+                            help="With -sasa-surface: use the molecule and frame whose SASA is closest to this "
+                                 "statistic of the SASA distribution: median, mean, mode (most probable SASA), q1, q3 (quartiles), min, max, mean+std, mean-std, or a SASA in nm^2")
+    sasa_group.add_argument('-sasa-ignore', default=None, nargs='+', dest='sasa_ignore', metavar='POS',
+                            help="With -sasa: beads that get no SASA, by their position within the molecule "
+                                 "(counted from 1 in the order of the mapping, as in <prefix><mol>_sasa_beads.dat), "
+                                 "e.g. -sasa-ignore \"1 3 5\". Replaces the automatic detection of dummy beads: "
+                                 "exactly these beads are dummies, for every molecule of -mols, and the SASA of their "
+                                 "atoms goes to the other beads of these atoms only (or to no bead).")
+    sasa_group.add_argument('-pref', type=str, dest="prefix", default="",
+                            help="common prefix of the SASA file names")
+
     args = parser.parse_args()
+    if args.sasa_surface and not args.sasa:
+        parser.error("-sasa-surface requires -sasa")
+    if args.sasa_ignore is not None:
+        if not args.sasa:
+            parser.error("-sasa-ignore requires -sasa")
+        try:
+            args.sasa_ignore = parse_bead_positions(args.sasa_ignore)
+        except ValueError as err:
+            parser.error(str(err))
+
+    try:
+        args.mol_names, cg_names = parse_mol_names(args.mol_names)
+    except ValueError as err:
+        parser.error(str(err))
  
     # to replace the cgsorder default string hack
     if not isinstance(args.cgsorder, bool):
@@ -171,6 +278,34 @@ def main():
                                       mappings,
                                       n_residues=None,
                                       res_iter=res_iter)
+
+    if args.sasa:
+        for mol_name in args.mol_names:
+            mol_atoms = init_universe.select_atoms(f"moltype {mol_name}")
+            cg_name = cg_names.get(mol_name)
+            if cg_name is None:
+                cg_name = mol_name
+                print(f"WARNING - No CG molecule name given for {mol_name} (-mols {mol_name}:<CG name>); "
+                      f"the SASA files are named after {mol_name}, and 'ff_assess -sasa' might not find them "
+                      f"if the CG molecule type is not named {mol_name}.")
+            print(f"INFO - Calculating SASA of {mol_name} (CG molecule {cg_name})")
+            mol_sasa = MoleculeSASA(mol_atoms, cg_name, cg=False, prefix=args.prefix)
+            # the beads of the mapping, whose SASA is summed from that of their atoms during the run
+            # the plain bead names (CGsmiles beads are named <fragment name><node index>)
+            bead_labels = {bead: label for mapping in mappings.values() for bead, label in mapping.bead_labels.items()}
+            try:
+                mol_sasa.set_mapped_beads(mapped_atoms, cg_universe, bead_labels=bead_labels,
+                                          ignore=args.sasa_ignore)
+            except ValueError as err:
+                parser.error(str(err))
+            mol_sasa.run()
+            mol_sasa.save(args.sasa)
+            print(f"INFO - SASA of {mol_name}: {mol_sasa.series.mean():.3f} ± {mol_sasa.series.std():.3f} nm^2")
+            if args.sasa_surface:
+                # AA surface of a representative frame and the mapped structure of that frame
+                surface = mol_sasa.write_surface(args.sasa, statistic=args.sasa_stat)
+                mol_sasa.write_mapped_structure(surface, cg_universe, outdir=args.sasa)
+
     # write coordinate
     print("INFO - Writing CG trajectory")
     # these are all the multiframe writes MDAnalysis has
