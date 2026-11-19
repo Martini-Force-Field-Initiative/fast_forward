@@ -65,6 +65,32 @@ def parse_mol_names(entries):
             cg_names[aa_name] = cg_name
     return mol_names, cg_names
 
+def parse_bead_positions(entries):
+    """
+    Parse the bead positions of -sasa-ignore: positions within the molecule, counted from 1,
+    separated by spaces or commas, in one or several arguments (``['1 3 5']``, ``['1', '3,5']``).
+
+    Returns
+    -------
+    list of int
+        the positions, sorted and without duplicates
+
+    Raises
+    ------
+    ValueError
+        if an entry is not a positive integer
+    """
+    positions = set()
+    for entry in entries:
+        for token in entry.replace(',', ' ').split():
+            if not token.isdigit() or int(token) < 1:
+                raise ValueError(f"invalid -sasa-ignore bead position '{token}': expected bead positions "
+                                 "within the molecule, counted from 1 (e.g. -sasa-ignore \"1 3 5\")")
+            positions.add(int(token))
+    if not positions:
+        raise ValueError("-sasa-ignore needs at least one bead position")
+    return sorted(positions)
+
 def main():
     """
     Parses commandline arguments and perform transformation.
@@ -137,12 +163,25 @@ def main():
                             dest='sasa_stat', metavar='STAT',
                             help="With -sasa-surface: use the molecule and frame whose SASA is closest to this "
                                  "statistic of the SASA distribution: median, mean, mode (most probable SASA), q1, q3 (quartiles), min, max, mean+std, mean-std, or a SASA in nm^2")
+    sasa_group.add_argument('-sasa-ignore', default=None, nargs='+', dest='sasa_ignore', metavar='POS',
+                            help="With -sasa: beads that get no SASA, by their position within the molecule "
+                                 "(counted from 1 in the order of the mapping, as in <prefix><mol>_sasa_beads.dat), "
+                                 "e.g. -sasa-ignore \"1 3 5\". Replaces the automatic detection of dummy beads: "
+                                 "exactly these beads are dummies, for every molecule of -mols, and the SASA of their "
+                                 "atoms goes to the other beads of these atoms only (or to no bead).")
     sasa_group.add_argument('-pref', type=str, dest="prefix", default="",
                             help="common prefix of the SASA file names")
 
     args = parser.parse_args()
     if args.sasa_surface and not args.sasa:
         parser.error("-sasa-surface requires -sasa")
+    if args.sasa_ignore is not None:
+        if not args.sasa:
+            parser.error("-sasa-ignore requires -sasa")
+        try:
+            args.sasa_ignore = parse_bead_positions(args.sasa_ignore)
+        except ValueError as err:
+            parser.error(str(err))
 
     try:
         args.mol_names, cg_names = parse_mol_names(args.mol_names)
@@ -254,7 +293,11 @@ def main():
             # the beads of the mapping, whose SASA is summed from that of their atoms during the run
             # the plain bead names (CGsmiles beads are named <fragment name><node index>)
             bead_labels = {bead: label for mapping in mappings.values() for bead, label in mapping.bead_labels.items()}
-            mol_sasa.set_mapped_beads(mapped_atoms, cg_universe, bead_labels=bead_labels)
+            try:
+                mol_sasa.set_mapped_beads(mapped_atoms, cg_universe, bead_labels=bead_labels,
+                                          ignore=args.sasa_ignore)
+            except ValueError as err:
+                parser.error(str(err))
             mol_sasa.run()
             mol_sasa.save(args.sasa)
             print(f"INFO - SASA of {mol_name}: {mol_sasa.series.mean():.3f} ± {mol_sasa.series.std():.3f} nm^2")

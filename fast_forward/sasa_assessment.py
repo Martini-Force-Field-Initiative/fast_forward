@@ -139,8 +139,8 @@ def assess_bead_sasa(mol_sasa, reference_dir, hellinger_weight):
         plot_data["sasa"][name] = {"x": reference_data.T[0], "Reference": reference_data.T[1], "Simulated": distr.T[1]}
     if ref_dummies:
         print(f"WARNING - The bead(s) {_listed(ref_dummies)} of {molname} have a CG SASA, but 'ff_map -sasa' "
-              "treated them as dummy beads (all their atoms belong to other beads), so they have no "
-              "reference; they are not assessed.")
+              "treated them as dummy beads (all their atoms belong to other beads, or ignored with "
+              "-sasa-ignore), so they have no reference; they are not assessed.")
     if missing:
         print(f"WARNING - Reference SASA file(s) listed in the bead table of {molname} not found in "
               f"{reference_dir}: {_listed(missing)}; these beads are not assessed.")

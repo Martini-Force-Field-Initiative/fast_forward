@@ -237,10 +237,10 @@ def test_ff_assess_sasa_missing_reference(tmp_path):
     assert "No SASA could be assessed" in proc.stdout
 
 
-def _run_ff_map_beads(map_file, outdir):
+def _run_ff_map_beads(map_file, outdir, extra=()):
     ff_map = [sys.executable, '-m', 'fast_forward.bin.ff_map',
               '-f', str(GSH_AA_TRAJ), '-s', str(GSH_AA_TPR), '-m', str(map_file),
-              '-mols', 'LIG:GSH', '-o', 'mapped.xtc', '-sasa', str(outdir)]
+              '-mols', 'LIG:GSH', '-o', 'mapped.xtc', '-sasa', str(outdir), *extra]
     proc = subprocess.run(ff_map, cwd=outdir, timeout=600, capture_output=True, text=True, env=ENV)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     return proc, np.loadtxt(outdir / "GSH_sasa.dat"), _bead_sasa(outdir)
@@ -299,6 +299,28 @@ def test_ff_map_bead_sasa(tmp_path):
     assert np.allclose(vs_sasa, sasa)
     for bead in full:
         assert np.allclose(vs[bead], full[bead])
+
+    # -sasa-ignore replaces the dummy detection: CAC1 (position 1) is ignored, VS1 is a real bead,
+    # sharing all atoms of AMD1 and SUL1 (half of each to VS1); the atoms of CAC1 go to no bead
+    (tmp_path / "ignore").mkdir()
+    proc, ignore_sasa, ignored = _run_ff_map_beads(tmp_path / "vs.map", tmp_path / "ignore",
+                                                   extra=['-sasa-ignore', '1'])
+    assert "No SASA assigned to the bead(s) 1_CAC1 of GSH, ignored with -sasa-ignore" in proc.stdout
+    assert "dummy bead(s) 1_VS1" not in proc.stdout
+    assert "of GSH are in no bead" in proc.stdout
+    table = (tmp_path / "ignore" / "GSH_sasa_beads.dat").read_text().splitlines()
+    assert table[1] == "1  CAC1  dummy  -" and table[-1] == "7  VS1  real  GSH_1_VS1_sasa_distr.dat"
+    assert sorted(ignored) == sorted(set(full) - {"CAC1"} | {"VS1"})
+    assert np.allclose(ignore_sasa, sasa) # the molecule does not depend on the beads
+    assert np.allclose(ignored["VS1"], ignored["AMD1"] + ignored["SUL1"])
+    assert np.allclose(ignored["AMD1"] + ignored["SUL1"] + ignored["VS1"], full["AMD1"] + full["SUL1"])
+
+    # a position beyond the beads of the molecule is a command line error
+    ff_map = [sys.executable, '-m', 'fast_forward.bin.ff_map', '-f', str(GSH_AA_TRAJ), '-s', str(GSH_AA_TPR),
+              '-m', str(GSH_MAP), '-mols', 'LIG:GSH', '-o', 'mapped.xtc', '-sasa', '.', '-sasa-ignore', '2 9']
+    proc = subprocess.run(ff_map, cwd=tmp_path / "ignore", timeout=600, capture_output=True, text=True, env=ENV)
+    assert proc.returncode == 2
+    assert "GSH has 6 bead(s), so there is no bead at position(s) 9" in proc.stderr
 
 
 @needs_data

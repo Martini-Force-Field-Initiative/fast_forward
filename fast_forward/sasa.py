@@ -354,7 +354,7 @@ class MoleculeSASA:
                 file = "-" if bead.dummy else self.bead_file_name(bead, "sasa_distr.dat").name
                 table.write(f"{bead.position}  {bead.label}  {'dummy' if bead.dummy else 'real'}  {file}\n")
 
-    def set_mapped_beads(self, mapped_atoms, cg_universe, bead_labels=None):
+    def set_mapped_beads(self, mapped_atoms, cg_universe, bead_labels=None, ignore=None):
         """
         Set the beads of the mapping (AA), molecule by molecule, before :meth:`run`, which
         splits the SASA of the atoms over them (as groups of atoms, see ``sassy.SASA.set_groups``).
@@ -377,11 +377,16 @@ class MoleculeSASA:
             {name in the mapped universe: bead name}, e.g. the CGsmiles fragment name of a
             bead (named ``<fragment name><node index>`` in the mapped universe); names not in
             it are used as they are
+        ignore : list of int, optional
+            positions within the molecule (from 1, ``ff_map -sasa-ignore``) of the beads that get
+            no SASA: they replace the automatic detection of dummy beads, exactly these beads are
+            dummies (in every molecule)
 
         Raises
         ------
         ValueError
-            if the molecules do not all have the same beads in the same order, or for a CG SASA
+            if the molecules do not all have the same beads in the same order, if a position of
+            ``ignore`` is not a bead of the molecule, or for a CG SASA
         """
         if self.cg:
             raise ValueError("set_mapped_beads splits the SASA of atoms over the beads of a mapping: "
@@ -411,15 +416,25 @@ class MoleculeSASA:
         mol_table, groups = None, []
         for m, beads in enumerate(mol_beads):
             bdxs = [bdx for bdx, _ in beads]
-            dummy = find_dummies([rows for _, rows in beads])
+            if ignore is None:
+                dummy = find_dummies([rows for _, rows in beads])
+            else:
+                outside = [index for index in ignore if index >= len(beads)]
+                if outside:
+                    raise ValueError(f"-sasa-ignore: {self.mol_name} has {len(beads)} bead(s), so there is no bead at "
+                                     f"position(s) {', '.join(map(str, outside))}")
+                dummy = np.isin(np.arange(1, len(beads) + 1), ignore)
             resindices = cg_universe.atoms.resindices[bdxs] if bdxs else np.zeros(0, dtype=int)
             labels = [bead_labels.get(name, name) for name in cg_universe.atoms[bdxs].names] if bdxs else []
-            table = [Bead(position, f"{res - resindices.min() + 1}_{label}", label, bool(d))
-                     for position, (res, label, d) in enumerate(zip(resindices, labels, dummy), 1)]
+            table = [Bead(index, f"{res - resindices.min() + 1}_{label}", label, bool(d))
+                     for index, (res, label, d) in enumerate(zip(resindices, labels, dummy), 1)]
             if mol_table is None:
                 mol_table = table
                 skipped = [bead.name for bead in table if bead.dummy]
-                if skipped:
+                if skipped and ignore is not None:
+                    print(f"INFO - No SASA assigned to the bead(s) {', '.join(skipped)} of {self.mol_name}, "
+                          f"ignored with -sasa-ignore")
+                elif skipped:
                     print(f"INFO - No SASA assigned to the dummy bead(s) {', '.join(skipped)} of "
                           f"{self.mol_name}: all their atoms belong to other beads")
             elif table != mol_table:
@@ -443,7 +458,7 @@ class MoleculeSASA:
         Set the CG beads of the itp ``block`` and their SASA, after :meth:`run`, from the SASA of
         the atoms (every bead is an atom to sassy): every bead except dummy beads (radius 0),
         virtual sites included. Every bead is named ``<resid>_<atomname>`` as in the itp and
-        keeps its position within the molecule (from 1, dummies included), by which it is
+        keeps its index within the molecule (from 1, dummies included), by which it is
         matched to the reference. Sets :attr:`beads` and the bead SASA (:meth:`set_bead_series`).
 
         Parameters

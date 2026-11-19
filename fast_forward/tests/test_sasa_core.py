@@ -73,6 +73,27 @@ def test_parse_mol_names():
             parse_mol_names([entry])
 
 
+def test_parse_bead_positions():
+    from fast_forward.bin.ff_map import parse_bead_positions
+    assert parse_bead_positions(['1 3 5']) == [1, 3, 5]
+    assert parse_bead_positions(['5', '3,1', '3']) == [1, 3, 5]
+    for entries in (['0'], ['1 x'], ['-2'], ['1.5'], [' ']):
+        with pytest.raises(ValueError, match="-sasa-ignore"):
+            parse_bead_positions(entries)
+
+
+@pytest.mark.parametrize('extra, message', [
+    (['-sasa-ignore', '1'], "-sasa-ignore requires -sasa"),
+    (['-sasa', '-sasa-ignore', '1 x'], "invalid -sasa-ignore bead position 'x'"),
+])
+def test_ff_map_invalid_sasa_ignore(tmp_path, extra, message):
+    ff_map = [sys.executable, '-m', 'fast_forward.bin.ff_map', '-f', 'x.xtc', '-s', 'x.tpr',
+              '-mols', 'LIG', '-o', 'out.gro'] + extra
+    proc = subprocess.run(ff_map, cwd=tmp_path, timeout=60, capture_output=True, text=True, env=ENV)
+    assert proc.returncode == 2
+    assert message in proc.stderr
+
+
 @pytest.mark.parametrize('mols', ['LIG:', ':GSH', 'LIG:GSH:X'])
 def test_ff_map_invalid_mols(tmp_path, mols):
     ff_map = [sys.executable, '-m', 'fast_forward.bin.ff_map', '-f', 'x.xtc', '-s', 'x.tpr',
