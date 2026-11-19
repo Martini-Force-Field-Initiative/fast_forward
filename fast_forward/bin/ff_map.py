@@ -251,10 +251,11 @@ def main():
                       f"if the CG molecule type is not named {mol_name}.")
             print(f"INFO - Calculating SASA of {mol_name} (CG molecule {cg_name})")
             mol_sasa = MoleculeSASA(mol_atoms, cg_name, cg=False, prefix=args.prefix)
-            # split the SASA of the atoms over the beads of the mapping
+            # the beads of the mapping, whose SASA is summed from that of their atoms during the run
             # the plain bead names (CGsmiles beads are named <fragment name><node index>)
             bead_labels = {bead: label for mapping in mappings.values() for bead, label in mapping.bead_labels.items()}
-            mol_sasa.map_to_beads(mapped_atoms, cg_universe, bead_labels=bead_labels)
+            mol_sasa.set_mapped_beads(mapped_atoms, cg_universe, bead_labels=bead_labels)
+            mol_sasa.run()
             mol_sasa.save(args.sasa)
             print(f"INFO - SASA of {mol_name}: {mol_sasa.series.mean():.3f} ± {mol_sasa.series.std():.3f} nm^2")
             if args.sasa_surface:

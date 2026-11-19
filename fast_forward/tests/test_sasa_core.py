@@ -1,6 +1,6 @@
 """
-Tests of the SASA code that do not need sassy (distributions, -sasa-stat, -mols, the split of
-the atom SASA over the beads, the bead table, the scores and the report), so they also run
+Tests of the SASA code that do not need sassy (distributions, -sasa-stat, -mols, the dummy
+beads of a mapping, the bead table, the scores and the report), so they also run
 without the 'sasa' extra; the SASA calculation itself is tested in test_sasa.py.
 """
 import subprocess
@@ -92,35 +92,14 @@ def test_ff_map_invalid_mols(tmp_path, mols):
     ([[0, 1], [1, 0]], [False, True]),
     # empty beads are not dummies
     ([[0, 1], []], [False, False]),
+    ([[], []], [False, False]),
+    ([], []),
+    # a dummy on all atoms: the beads sharing atom 1 are kept
+    ([[0, 1], [1, 2, 3], [0, 1, 2, 3]], [False, False, True]),
 ])
-def test_map_sasa_dummy_beads(beads, expected):
-    from fast_forward.sasa import map_sasa
-    atom_sasa = np.arange(1.0, 6.0)[:, None] # 5 atoms, 1 frame
-    bead_sasa, dummy, _ = map_sasa(atom_sasa, beads)
-    assert dummy.tolist() == expected
-    # one row per non-dummy bead
-    assert bead_sasa.shape == (expected.count(False), 1)
-
-
-def test_map_sasa_shared():
-    from fast_forward.sasa import map_sasa
-    atom_sasa = np.array([[1.0, 2.0], [4.0, 8.0], [0.5, 0.5], [3.0, 3.0]]) # 4 atoms, 2 frames
-    # atom 1 is shared (and listed twice in bead 0), atom 3 is in no bead
-    bead_sasa, dummy, unassigned = map_sasa(atom_sasa, [[0, 1, 1], [1, 2]])
-    assert not dummy.any()
-    assert np.allclose(bead_sasa, [[1.0 + 2.0, 2.0 + 4.0], [2.0 + 0.5, 4.0 + 0.5]])
-    assert unassigned.tolist() == [3]
-    assert np.allclose(bead_sasa.sum(axis=0) + atom_sasa[3], atom_sasa.sum(axis=0))
-
-
-def test_map_sasa_dummy_takes_no_share():
-    from fast_forward.sasa import map_sasa
-    atom_sasa = np.array([[1.0], [2.0], [4.0], [8.0]]) # 4 atoms, 1 frame
-    # bead 2 is a dummy on all atoms; atom 1 is shared by beads 0 and 1 only
-    bead_sasa, dummy, unassigned = map_sasa(atom_sasa, [[0, 1], [1, 2, 3], [0, 1, 2, 3]])
-    assert dummy.tolist() == [False, False, True]
-    assert np.allclose(bead_sasa, [[1.0 + 1.0], [1.0 + 4.0 + 8.0]])
-    assert len(unassigned) == 0
+def test_find_dummies(beads, expected):
+    from fast_forward.sasa import find_dummies
+    assert find_dummies(beads).tolist() == expected
 
 
 def test_score_sasa_invalid():

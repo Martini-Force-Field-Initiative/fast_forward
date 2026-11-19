@@ -39,6 +39,12 @@ def test_molecule_sasa_aa(tmp_path):
     u = mda.Universe(str(GSH_AA_TPR), str(GSH_AA_TRAJ))
     ag = u.select_atoms("moltype LIG")
     mol_sasa = MoleculeSASA(ag, "GSH", prefix="test_", cg=False)
+    assert mol_sasa.sasa.keep_atoms is False # AA: the bead SASA is summed during the run
+    with pytest.raises(ValueError, match="needs an atomistic SASA"):
+        MoleculeSASA(ag, "GSH", cg=True).set_mapped_beads([], None)
+    with pytest.raises(RuntimeError, match="call run"):
+        mol_sasa.save(tmp_path)
+    mol_sasa.run()
     mol_sasa.save(tmp_path)
     series, distr = mol_sasa.series, mol_sasa.distribution
     # one molecule: one SASA value per frame
@@ -62,6 +68,34 @@ def test_molecule_sasa_aa(tmp_path):
     assert np.isclose(series[surface.frame], series.max())
 
 
+def _split(atom_sasa, beads):
+    """The SASA of the beads that are not dummies, as MoleculeSASA splits it, and the dummies."""
+    from sassy import group_weights
+    from fast_forward.sasa import find_dummies
+    dummy = find_dummies(beads)
+    weights, unassigned = group_weights([b for b, d in zip(beads, dummy) if not d], len(atom_sasa))
+    return weights @ atom_sasa, dummy, unassigned
+
+
+def test_bead_split_shared():
+    atom_sasa = np.array([[1.0, 2.0], [4.0, 8.0], [0.5, 0.5], [3.0, 3.0]]) # 4 atoms, 2 frames
+    # atom 1 is shared (and listed twice in bead 0), atom 3 is in no bead
+    bead_sasa, dummy, unassigned = _split(atom_sasa, [[0, 1, 1], [1, 2]])
+    assert not dummy.any()
+    assert np.allclose(bead_sasa, [[1.0 + 2.0, 2.0 + 4.0], [2.0 + 0.5, 4.0 + 0.5]])
+    assert unassigned.tolist() == [3]
+    assert np.allclose(bead_sasa.sum(axis=0) + atom_sasa[3], atom_sasa.sum(axis=0))
+
+
+def test_bead_split_dummy_takes_no_share():
+    atom_sasa = np.array([[1.0], [2.0], [4.0], [8.0]]) # 4 atoms, 1 frame
+    # bead 2 is a dummy on all atoms; atom 1 is shared by beads 0 and 1 only
+    bead_sasa, dummy, unassigned = _split(atom_sasa, [[0, 1], [1, 2, 3], [0, 1, 2, 3]])
+    assert dummy.tolist() == [False, False, True]
+    assert np.allclose(bead_sasa, [[1.0 + 1.0], [1.0 + 4.0 + 8.0]])
+    assert len(unassigned) == 0
+
+
 def test_statistics_match_sassy():
     sassy = pytest.importorskip("sassy")
     from fast_forward.sasa import STATISTICS
@@ -72,7 +106,7 @@ def test_statistics_match_sassy():
 def test_cg_surface_statistic(tmp_path):
     # an explicit statistic ignores the mapped structure
     u = mda.Universe(str(GSH_ASSESS_TPR), str(GSH_ASSESS_TRAJ))
-    mol_sasa = MoleculeSASA(u.select_atoms("moltype GSH"), "GSH", cg=True)
+    mol_sasa = MoleculeSASA(u.select_atoms("moltype GSH"), "GSH", cg=True).run()
     u.atoms[:6].write(str(tmp_path / "GSH_sasa_mapped.pdb"))
     surface = mol_sasa.write_cg_surface(reference_dir=tmp_path, outdir=tmp_path, statistic="min")
     assert surface.rmsd is None
@@ -82,7 +116,7 @@ def test_cg_surface_statistic(tmp_path):
 @needs_data
 def test_cg_surface_mismatched_reference(tmp_path, capsys):
     u = mda.Universe(str(GSH_ASSESS_TPR), str(GSH_ASSESS_TRAJ))
-    mol_sasa = MoleculeSASA(u.select_atoms("moltype GSH"), "GSH", cg=True)
+    mol_sasa = MoleculeSASA(u.select_atoms("moltype GSH"), "GSH", cg=True).run()
     # mapped structure with fewer beads than the CG molecule
     u.atoms[:3].write(str(tmp_path / "GSH_sasa_mapped.pdb"))
     surface = mol_sasa.write_cg_surface(reference_dir=tmp_path, outdir=tmp_path)
@@ -268,7 +302,7 @@ def test_ff_map_bead_sasa(tmp_path):
 
 
 @needs_data
-def test_cg_bead_sasa_skip_dummies():
+def test_set_cg_beads_skip_dummies():
     """
     ff_assess saves the SASA of every CG bead, virtual sites included, except dummy
     beads (type U, radius 0).
@@ -287,14 +321,18 @@ def test_cg_bead_sasa_skip_dummies():
     types[5] = "U" # last bead as a dummy
     atoms.types = types
     mol_sasa = MoleculeSASA(atoms, "GSH", cg=True)
-    mol_sasa.cg_bead_sasa(block)
+    with pytest.raises(ValueError, match="after run"):
+        mol_sasa.set_cg_beads(block)
+    mol_sasa.run()
+    mol_sasa.set_cg_beads(block)
     assert mol_sasa.bead_names == names[:5] # the virtual site (bead 4) is kept
     assert mol_sasa.bead_series.shape == (5, u.trajectory.n_frames)
     assert np.allclose(mol_sasa.bead_series.sum(axis=0), mol_sasa.series) # the dummy has no SASA
-    assert mol_sasa.sasa.results.atom_sasa is None # the SASA of the atoms is freed
+    assert np.array_equal(mol_sasa.bead_series, mol_sasa.sasa.results.atom_sasa[:5]) # one molecule
+    assert [bead.dummy for bead in mol_sasa.beads] == [False] * 5 + [True]
     with pytest.raises(ValueError, match="has 6 beads, but the itp has 5"):
         block.remove_node(list(block.nodes)[-1])
-        MoleculeSASA(atoms, "GSH", cg=True).cg_bead_sasa(block)
+        mol_sasa.set_cg_beads(block)
 
 
 def _gsh_itp(path, edit):

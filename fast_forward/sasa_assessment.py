@@ -199,8 +199,8 @@ def assess_sasa(universe, blocks, file_map, reference_dir, prefix="", hellinger_
             _missing_reference(molname, file_map, reference_dir, prefix)
             continue
 
-        mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=prefix)
-        mol_sasa.cg_bead_sasa(block) # SASA of every bead (without dummies)
+        mol_sasa = MoleculeSASA(mol_atoms, molname, cg=True, prefix=prefix).run()
+        mol_sasa.set_cg_beads(block) # the SASA of every bead (without dummies)
         if distribution_data:
             mol_sasa.save(distribution_data)
         probs = mol_sasa.distribution.T[1]
