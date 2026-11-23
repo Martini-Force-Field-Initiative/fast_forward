@@ -10,7 +10,8 @@ import vermouth
 import vermouth.forcefield
 from vermouth.molecule import Interaction
 
-from fast_forward.constraint_coupling import compute_coupling, report_constraint_coupling
+from fast_forward.constraint_coupling import (compute_coupling, estimate_lincs_order,
+                                              report_constraint_coupling)
 from fast_forward.universe_handler import res_as_mol
 
 # equilateral triangle with side length 3 Angstrom
@@ -24,6 +25,17 @@ CHAIN = np.array([[0.0, 0.0, 0.0],
                   [3.0, 0.0, 0.0],
                   [4.5, 1.5 * np.sqrt(3), 0.0]])
 CHAIN_CONSTRAINTS = [(0, 1), (1, 2)]
+# light central bead constrained to 4 heavy beads on a cone (half-angle 30 deg)
+# around z. Off-diagonal dot products per row sum to 0.75 + 0.75 + 0.5 = 2, so
+# lambda_max = 2 * M / (M + m): 1.6 for m = 18, M = 72, and 1.0 for equal masses
+_HALF = np.radians(30)
+STAR = np.vstack([[0.0, 0.0, 0.0]] +
+                 [3.0 * np.array([np.sin(_HALF) * np.cos(phi),
+                                  np.sin(_HALF) * np.sin(phi),
+                                  np.cos(_HALF)])
+                  for phi in np.radians([0, 90, 180, 270])])
+STAR_CONSTRAINTS = [(0, i) for i in range(1, 5)]
+STAR_MASSES = [18.0] + [72.0] * 4
 
 
 def _lambda_max(A):
@@ -54,27 +66,28 @@ def test_compute_coupling_does_not_modify_input():
     assert constraints == [(1, 0), (2, 0)]
 
 
-def _make_system(block_masses, univ_tri_mass):
+def _make_system(block_masses, univ_mass, positions=CHAIN, constraints=CHAIN_CONSTRAINTS):
     """
-    Universe with two single-bead SOL molecules followed by one TRI molecule
-    (a bent 3-bead chain), so that block indices of TRI do not coincide
-    with universe indices.
+    Universe with two single-bead SOL molecules followed by one MOL molecule
+    (by default a bent 3-bead chain), so that block indices of MOL do not
+    coincide with universe indices.
     """
-    u = mda.Universe.empty(n_atoms=5, n_residues=3,
-                           atom_resindex=[0, 1, 2, 2, 2],
+    n_mol = len(positions)
+    u = mda.Universe.empty(n_atoms=2 + n_mol, n_residues=3,
+                           atom_resindex=[0, 1] + [2] * n_mol,
                            trajectory=True)
-    u.add_TopologyAttr('resnames', ['SOL', 'SOL', 'TRI'])
-    u.add_TopologyAttr('names', ['W', 'W', 'A', 'B', 'C'])
-    u.add_TopologyAttr('masses', [72.0, 72.0] + [univ_tri_mass] * 3)
-    # SOL beads placed so that using them instead of TRI gives a different result
-    u.atoms.positions = np.vstack([[[10.0, 10.0, 10.0], [10.0, 13.0, 10.0]], CHAIN])
+    u.add_TopologyAttr('resnames', ['SOL', 'SOL', 'MOL'])
+    u.add_TopologyAttr('names', ['W', 'W'] + [f'B{i}' for i in range(n_mol)])
+    u.add_TopologyAttr('masses', [72.0, 72.0] + [univ_mass] * n_mol)
+    # SOL beads placed so that using them instead of MOL gives a different result
+    u.atoms.positions = np.vstack([[[10.0, 10.0, 10.0], [10.0, 13.0, 10.0]], positions])
     res_as_mol(u)
 
     block = vermouth.molecule.Block(force_field=vermouth.forcefield.ForceField('dummy'),
-                                    name='TRI')
-    for i, (name, mass) in enumerate(zip('ABC', block_masses)):
-        block.add_node(i, atomname=name, resid=1, resname='TRI', mass=mass)
-    for a, b in CHAIN_CONSTRAINTS:
+                                    name='MOL')
+    for i, mass in enumerate(block_masses):
+        block.add_node(i, atomname=f'B{i}', resid=1, resname='MOL', mass=mass)
+    for a, b in constraints:
         block.interactions['constraints'].append(
             Interaction(atoms=[a, b], parameters=['1', '0.3'], meta={}))
     return u, block
@@ -89,7 +102,7 @@ def _reported_eigenvalue(capsys):
 
 def test_report_maps_block_to_universe_indices_and_uses_block_masses(capsys):
     block_masses = [36.0, 72.0, 54.0]
-    u, block = _make_system(block_masses, univ_tri_mass=72.0)
+    u, block = _make_system(block_masses, univ_mass=72.0)
 
     report_constraint_coupling(u, block, estimate_lincs=True)
     reported = _reported_eigenvalue(capsys)
@@ -103,10 +116,52 @@ def test_report_maps_block_to_universe_indices_and_uses_block_masses(capsys):
 
 
 def test_report_falls_back_to_universe_masses(capsys):
-    u, block = _make_system([36.0, 72.0, 54.0], univ_tri_mass=72.0)
+    u, block = _make_system([36.0, 72.0, 54.0], univ_mass=72.0)
     for node in block.nodes:
         del block.nodes[node]['mass']
 
     report_constraint_coupling(u, block, estimate_lincs=True)
     # equal masses, 120 degrees: (1/m) * (m/2) * |cos(120)| = 0.25
     assert _reported_eigenvalue(capsys) == pytest.approx(0.25, abs=0.005)
+
+
+@pytest.mark.parametrize('eig_max, expected', [
+    (0.4, 4),
+    (0.5, 6),     # 5.28 -> rounded up
+    (0.8, 17),    # 16.4 -> rounded up
+    (0.999, 3664),
+    (1.0, None),
+    (1 - 1e-12, None),  # floating point noise around 1
+    (1.6, None),
+])
+def test_estimate_lincs_order(eig_max, expected):
+    assert estimate_lincs_order(eig_max) == expected
+
+
+def test_compute_coupling_star_exceeds_one():
+    A = compute_coupling(STAR_CONSTRAINTS, dict(enumerate(STAR_MASSES)), dict(enumerate(STAR)))
+    assert _lambda_max(A) == pytest.approx(1.6)
+
+
+@pytest.mark.parametrize('estimate_lincs', [True, False])
+def test_report_eigenvalue_above_one(capsys, estimate_lincs):
+    u, block = _make_system(STAR_MASSES, univ_mass=72.0,
+                            positions=STAR, constraints=STAR_CONSTRAINTS)
+    # must not raise and must warn even without -lincs
+    report_constraint_coupling(u, block, estimate_lincs=estimate_lincs)
+    out = capsys.readouterr().out
+    assert "Largest eigenvalue: 1.60" in out
+    assert "will not converge" in out
+    assert "Estimated LINCS order: none" in out
+    assert "Estimated LINCS order: -" not in out
+
+
+def test_report_eigenvalue_at_one(capsys):
+    # equal masses in the star give lambda_max = 1.0 (up to rounding),
+    # which used to raise OverflowError or report a huge negative order
+    u, block = _make_system([72.0] * 5, univ_mass=72.0,
+                            positions=STAR, constraints=STAR_CONSTRAINTS)
+    report_constraint_coupling(u, block, estimate_lincs=False)
+    out = capsys.readouterr().out
+    assert "Largest eigenvalue: 1.00" in out
+    assert "will not converge" in out

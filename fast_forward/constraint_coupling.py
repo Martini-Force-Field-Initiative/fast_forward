@@ -67,7 +67,7 @@ def compute_coupling(constraints, masses, positions):
 def estimate_lincs_order(eig_max):
     '''
     Estimate the LINCS expansion order needed for a coupling matrix with
-    largest absolute eigenvalue `eig_max`, i.e. the order at which the
+    largest absolute eigenvalue `eig_max`, i.e. the smallest order at which the
     expansion error eig_max**order matches that of the GROMACS default
     (lincs-order 4) for a typical eigenvalue of 0.4.
 
@@ -82,9 +82,12 @@ def estimate_lincs_order(eig_max):
         Estimated LINCS order, or None if eig_max >= 1, in which case the
         LINCS expansion does not converge for any order.
     '''
-    if eig_max >= 1:
+    # treat values within floating point noise of 1 as 1
+    if eig_max >= 1 - 1e-8:
         return None
-    return int(np.log(0.4**4)/np.log(eig_max))
+    # round up (with a small tolerance for floating point noise) so the
+    # order is never underestimated
+    return int(np.ceil(np.log(0.4**4)/np.log(eig_max) - 1e-9))
 
 def report_constraint_coupling(u, block, estimate_lincs=False):
     '''
@@ -135,7 +138,8 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
         print('     Check the masses of the atoms in the itp.')
         return
     # eigenvalues
-    w, _ = np.linalg.eig(A)
+    # A is symmetric, so eigvalsh gives real eigenvalues
+    w = np.linalg.eigvalsh(A)
     eig_max = np.abs(w).max() # lambda_max
 
     if eig_max == 0:
