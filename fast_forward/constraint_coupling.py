@@ -118,6 +118,11 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
             print(f"[ Constraint Coupling Report for {block.name} ]\nNo constraints coupling detected.\n")
         return
 
+    if len(u.select_atoms(f'moltype {block.name}')) == 0:
+        print(f"WARNING: cannot compute constraint coupling for {block.name}: "
+              "molecule not found in the trajectory. Skipping.\n")
+        return
+
     pairs = [tuple(c.atoms) for c in constraints]
     nodes = sorted({atom for pair in pairs for atom in pair})
     # map block atoms onto the universe indices of the first molecule of this type
@@ -128,14 +133,29 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
     masses = {}
     for node, idx in node_to_univ.items():
         mass = block.nodes[node].get('mass')
-        masses[node] = float(mass) if mass is not None else u.atoms[idx].mass
+        masses[node] = float(mass) if mass is not None else float(u.atoms[idx].mass)
 
-    A = compute_coupling(pairs, masses, positions)
+    # LINCS needs a finite, positive mass on every constrained atom
+    bad_atoms = [node for node, mass in masses.items()
+                 if not np.isfinite(mass) or mass <= 0]
+    if bad_atoms:
+        # report 1-based atom numbers as in the itp
+        atom_list = ', '.join(str(node + 1) for node in bad_atoms)
+        print(f"WARNING: cannot compute constraint coupling for {block.name}: "
+              f"atom(s) {atom_list} are part of constraints but have a zero, negative "
+              "or missing mass.\n"
+              "         Constraints on massless particles are not supported by LINCS; "
+              "check the masses in the itp.\n")
+        return
 
-    # check if A contains inf or nan
-    if np.isnan(A).any() or np.isinf(A).any():
-        print('WARNING: unable to calculate constraint coupling matrix, contains NaN or Inf values.')
-        print('     Check the masses of the atoms in the itp.')
+    with np.errstate(invalid='ignore', divide='ignore'):
+        A = compute_coupling(pairs, masses, positions)
+
+    # masses are checked above, so NaN/Inf can only come from the geometry
+    if not np.isfinite(A).all():
+        print(f"WARNING: cannot compute constraint coupling for {block.name}: "
+              "coupling matrix contains NaN or Inf values.\n"
+              "         Check for constrained atoms at identical positions in the trajectory.\n")
         return
     # eigenvalues
     # A is symmetric, so eigvalsh gives real eigenvalues

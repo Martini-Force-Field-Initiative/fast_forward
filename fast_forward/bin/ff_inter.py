@@ -181,11 +181,14 @@ def main():
                         )
                         pbar.set_postfix_str(molname)
                         pbar.update(1)
-        # constraint coupling analysis
-        for molname, block in ff.blocks.items():
-            report_constraint_coupling(u, block, args.estimate_lincs)
     # write out using DeferredFileWriter to back up any existing files of the same names
     DeferredFileWriter().write()
+
+    # constraint coupling analysis; purely diagnostic, so it runs after all
+    # output is on disk and an error here cannot lose the fitted itps
+    if args.itp_files:
+        for molname, block in ff.blocks.items():
+            report_constraint_coupling(u, block, args.estimate_lincs)
 
 if __name__ == "__main__":
     main()

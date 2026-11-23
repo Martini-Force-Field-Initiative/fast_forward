@@ -57,3 +57,25 @@ def test_ff_inter(tmp_path, monkeypatch, command_list, reference_distributions):
     # compare the output itps
     output_itp = [i for i in files if i.suffix == '.itp'][0]
     compare_itp(GSH_ITP_OUTPUT, output_itp)
+
+
+def test_ff_inter_writes_itp_even_if_coupling_report_fails(tmp_path, monkeypatch):
+    """
+    The constraint coupling report is diagnostic only; an error in it must not
+    prevent the fitted itp from being written.
+    """
+    import sys
+    from fast_forward.bin import ff_inter
+
+    def broken_report(*args, **kwargs):
+        raise RuntimeError("coupling report failed")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(ff_inter, 'report_constraint_coupling', broken_report)
+    monkeypatch.setattr(sys, 'argv', ['ff_inter', '-f', str(GSH_CG_TRAJ), '-s', str(GSH_CG_TPR),
+                                      '-i', str(GSH_ITP_INTIIAL), '-interactions', 'comments'])
+
+    with pytest.raises(RuntimeError, match="coupling report failed"):
+        ff_inter.main()
+
+    assert [i for i in tmp_path.iterdir() if i.suffix == '.itp']

@@ -165,3 +165,37 @@ def test_report_eigenvalue_at_one(capsys):
     out = capsys.readouterr().out
     assert "Largest eigenvalue: 1.00" in out
     assert "will not converge" in out
+
+
+@pytest.mark.parametrize('block_mass, univ_mass, bad', [
+    (0.0, 72.0, '2'),        # zero mass in the itp
+    (-1.0, 72.0, '2'),       # negative mass in the itp
+    (None, 0.0, '2'),        # no mass in the itp, zero in the universe
+])
+def test_report_invalid_mass_warns(capsys, block_mass, univ_mass, bad):
+    u, block = _make_system([36.0, 72.0, 54.0], univ_mass=univ_mass)
+    if block_mass is None:
+        del block.nodes[1]['mass']
+    else:
+        block.nodes[1]['mass'] = block_mass
+    report_constraint_coupling(u, block, estimate_lincs=True)
+    out = capsys.readouterr().out
+    assert f"atom(s) {bad} are part of constraints" in out
+    assert "Largest eigenvalue" not in out
+
+
+def test_report_molecule_not_in_trajectory_warns(capsys):
+    u, block = _make_system([36.0, 72.0, 54.0], univ_mass=72.0)
+    block.name = 'ABSENT'
+    report_constraint_coupling(u, block, estimate_lincs=True)
+    out = capsys.readouterr().out
+    assert "molecule not found in the trajectory" in out
+
+
+def test_report_coincident_atoms_warns(capsys):
+    u, block = _make_system([36.0, 72.0, 54.0], univ_mass=72.0)
+    # put MOL atoms 0 and 1 (universe indices 2 and 3) on top of each other
+    u.atoms[3].position = u.atoms[2].position
+    report_constraint_coupling(u, block, estimate_lincs=True)
+    out = capsys.readouterr().out
+    assert "identical positions" in out
