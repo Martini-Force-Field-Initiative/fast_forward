@@ -1,7 +1,7 @@
  [ Distance Distribution Report for GSH ]
-  Overall Score : 0.37 ± 0.05
+  Overall Score : 0.316 ± 0.0149
 
-   Max Score : 0.99
+   Max Score : 0.49
 
  Score guide:
    0.0-0.3 : good
@@ -11,10 +11,10 @@
    Score Matrix:
  0 - identical, 1 - no overlap
 
-       CAC1  AMC1  AMD1  SUL1  AMD2  CAC2
- CAC1  0.00  0.23  0.17  0.17  0.15  0.27
- AMC1  0.23  0.00  0.99  0.15  0.22  0.26
- AMD1  0.17  0.99  0.00  0.43  0.16  0.48
- SUL1  0.17  0.15  0.43  0.00  0.84  0.24
- AMD2  0.15  0.22  0.16  0.84  0.00  0.79
- CAC2  0.27  0.26  0.48  0.24  0.79  0.00
+      1_CAC1 1_AMC1 1_AMD1 1_SUL1 1_AMD2 1_CAC2
+1_CAC1  0.00  0.40  0.29  0.43  0.25  0.27
+1_AMC1  0.40  0.00  0.24  0.33  0.29  0.34
+1_AMD1  0.29  0.24  0.00  0.49  0.39  0.33
+1_SUL1  0.43  0.33  0.49  0.00  0.25  0.26
+1_AMD2  0.25  0.29  0.39  0.25  0.00  0.18
+1_CAC2  0.27  0.34  0.33  0.26  0.18  0.00

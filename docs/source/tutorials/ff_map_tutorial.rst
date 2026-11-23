@@ -24,7 +24,7 @@ essential step in preparing your system. Such a processing could be performed us
 
 
 
-The files in the `AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/AA>`_
+The files in the `AA <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/examples/GSH/AA>`_
 subfolder called ``atomistic.gro``, ``atomistic.xtc`` and ``atomsitic.tpr`` are readily prepared solvent-free atomistic coordinate,
 trajectory and topology files for use for the rest of this tutorial.
 
@@ -71,7 +71,7 @@ The mapped structure could now be viewed in vmd to check that everything is now 
 
 .. figure:: ../figs/ff_map_overlay.png
 
-The tutorial folder `data/CG <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/fast_forward/tests/data/GSH/CG>`_
+The tutorial folder `data/CG <https://github.com/Martini-Force-Field-Initiative/fast_forward/tree/main/examples/GSH/CG>`_
 contains the mapped first frame and trajectory.
 
 From here, the mapped trajectory can be used in the ``ff_inter`` subprogram to generate

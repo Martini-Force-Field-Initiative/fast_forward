@@ -1,0 +1,52 @@
+; This file was generated using the following command:
+; /Users/chrisbrasnett/Documents/GitHub/fast_forward/.venv/bin/ff_inter -f /Users/chrisbrasnett/Documents/GitHub/fast_forward/examples/GSH/CG/mapped.xtc -s /Users/chrisbrasnett/Documents/GitHub/fast_forward/examples/GSH/interactions/mapped.tpr -i /Users/chrisbrasnett/Documents/GitHub/fast_forward/examples/GSH/GSH_initial.itp -max-dihedral 10 -interactions comments -dists -plots -dist-matrix
+; 
+
+; Please cite the following papers:
+; Kroon, P C; Grunewald, F; Barnoud, J; van Tilburg, M; Souza, P C; Wassenaar, T A; Marrink, S J;  elife 2024; 10.7554/elife.90627.2
+; Brasnett, C; Fidlin, M; Duve, T; Thallmair, S; Marrink, S J; Grünewald, F;  ChemRxiv 2026; 10.26434/chemrxiv.15001072/v1
+
+[ moleculetype ]
+GSH 1
+
+[ atoms ]
+1 SQ5n 1 GSH CAC1 1 -1.0 
+2 Q4p  1 GSH AMC1 2  1.0 
+3 P2   1 GSH AMD1 3  0.0 
+4 TC6  1 GSH SUL1 4  0.0 
+5 P2   1 GSH AMD2 5  0.0 
+6 SQ5n 1 GSH CAC2 6 -1.0 
+
+[ bonds ]
+1 2 1 0.278 5717.075 ; CAC1_AMC1
+3 4 1 0.273 4900.223 ; AMD1_SUL1
+3 5 1 0.357 8109.482 ; AMD1_AMD2
+
+#ifdef FLEXIBLE
+2 3 1 0.415 10000 ; AMC1_AMD1
+5 6 1 0.284 10000 ; AMD2_CAC2
+#endif
+
+[ constraints ]
+#ifndef FLEXIBLE
+2 3 1 0.415 ; AMC1_AMD1
+5 6 1 0.284 ; AMD2_CAC2
+#endif
+
+[ angles ]
+1 2 3 1 114.454 44.519 ; CAC1_AMC1_AMD1
+2 3 4 1 128.897 82.783 ; AMC1_AMD1_SUL1
+2 3 5 1 133.35 86.865 ; AMC1_AMD1_AMD2
+4 3 5 1 81.985 51.137 ; SUL1_AMD1_AMD2
+3 5 6 1 127.251 79.14 ; AMD1_AMD2_CAC2
+
+[ dihedrals ]
+; AMC1_AMD1_AMD2_CAC2
+2 3 5 6 9 38.433 -2.499 1 ; AMC1_AMD1_AMD2_CAC2
+
+; CAC1_AMC1_AMD1_AMD2
+1 2 3 5 9 -89.77 -2.216 1 ; CAC1_AMC1_AMD1_AMD2
+
+; CAC1_AMC1_AMD1_SUL1
+1 2 3 4 9 161.861 -2.293 1 ; CAC1_AMC1_AMD1_SUL1
+

@@ -3,6 +3,7 @@
 Main exe for scoring simulations against mapped trajectories
 """
 import argparse
+import sys
 from glob import glob
 from pathlib import Path
 import numpy as np
@@ -113,7 +114,7 @@ def report_distances(score_matrix, molname, atom_names):
     with open('report_distances.out', 'w') as fout:
         fout.writelines(printable)
 
-def main():
+def _main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,)
     parser.add_argument('-f', type=str, dest="trajfile", help="simulated trajectory file")
     parser.add_argument('-s', type=str, dest="tprfile", help="simulated tpr file", default=None)
@@ -135,6 +136,9 @@ def main():
     parser.add_argument('-dists', default=None, const=".", nargs="?",
                         dest="distribution_data",
                         help="Save text files with time series and distribution data for interactions. Optionally provide a path (default: current dir).")
+    parser.add_argument('-interactions-only', default=False, action='store_true', dest='interactions_only',
+                        help="Only assess bonded interaction distributions (bonds, angles, dihedrals); skip "
+                             "the pairwise distance assessment entirely.")
 
     args = parser.parse_args()
 
@@ -187,10 +191,11 @@ def main():
                     try:
                         ref_file = file_map[reference_name]
                     except KeyError:
-                        print(f"{reference_name} file not found!")
+                        msg = f"{reference_name} file not found!"
                         if args.prefix == "":
-                            print("your prefix is set to the default value: consider changing it to the actual prefix.")
-                        continue
+                            msg += (" your prefix is set to the default value: consider changing it to the "
+                                    "actual prefix.")
+                        raise FileNotFoundError(msg) from None
 
                     reference_data = np.genfromtxt(ref_file)
                     # calculate hellinger distance between simulated and reference distributions
@@ -210,34 +215,48 @@ def main():
             make_distribution_plot(plot_data, args.plot_data, name=f'{args.plots}/interaction_distributions_{molname}')
         
         report_interactions(h_score_dict, score_dict, args.exclude_outliers)
-        
+
         # evaluation of distances
-        file_map = {}
-        for f in distribution_files:
-            p = Path(f)
-            if p.name in file_map:
-                print(f"Warning: duplicate reference file name '{p.name}', using the first one.")
-                continue
-            file_map[p.name] = p
+        if args.interactions_only:
+            print("Skipping distance assessment ('-interactions-only' given).")
+        else:
+            file_map = {}
+            for f in distribution_files:
+                p = Path(f)
+                if p.name in file_map:
+                    print(f"Warning: duplicate reference file name '{p.name}', using the first one.")
+                    continue
+                file_map[p.name] = p
 
-        for molname, block in ff.blocks.items():
-            score_m, plot_data = score_matrix(molname=molname, 
-                                   block=block, 
-                                   universe=u, 
-                                   file_map=file_map,
-                                   file_prefix=args.prefix,
-                                   hellinger_weight=args.hellinger_weight,
-                                   include_constraints=args.include_constraints)
-            
-            atom_names = [f'{resid}_{name}' for (_, name), (_, resid) in zip(block.nodes(data='atomname'), block.nodes(data='resid'))]
+            if not any(name.endswith('_distances_distr.dat') for name in file_map):
+                print("WARNING: no '*_distances_distr.dat' reference files found in "
+                     f"'{args.reference}'; skipping distance assessment. Re-run ff_inter "
+                     "with '-dist-matrix' to generate them.")
+            else:
+                for molname, block in ff.blocks.items():
+                    score_m, plot_data = score_matrix(molname=molname,
+                                           block=block,
+                                           universe=u,
+                                           file_map=file_map,
+                                           file_prefix=args.prefix,
+                                           hellinger_weight=args.hellinger_weight,
+                                           include_constraints=args.include_constraints)
 
-            if args.plots:
-                make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
-                make_distances_distribution_plot(
-                    plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
-                )
+                    atom_names = [f'{resid}_{name}' for (_, name), (_, resid) in zip(block.nodes(data='atomname'), block.nodes(data='resid'))]
 
-            report_distances(score_m, molname, atom_names)
+                    if args.plots:
+                        make_matrix_plot(score_m, atom_names, name=f'{args.plots}/score_matrix_{molname}')
+                        make_distances_distribution_plot(
+                            plot_data, atom_names, name=f'{args.plots}/distance_distributions_{molname}',save_plot_data=True
+                        )
 
-if __name__ == "__main__":
+                    report_distances(score_m, molname, atom_names)
+
+def main():
+    try:
+        _main()
+    except FileNotFoundError as err:
+        sys.exit(f"Error: {err}")
+
+if __name__ == '__main__':
     main()
