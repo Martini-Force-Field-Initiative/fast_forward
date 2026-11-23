@@ -64,6 +64,28 @@ def compute_coupling(constraints, masses, positions):
             A[i,j] = mass_factor[i,j] * np.dot(B[i],B[j])
     return A
 
+def estimate_lincs_order(eig_max):
+    '''
+    Estimate the LINCS expansion order needed for a coupling matrix with
+    largest absolute eigenvalue `eig_max`, i.e. the order at which the
+    expansion error eig_max**order matches that of the GROMACS default
+    (lincs-order 4) for a typical eigenvalue of 0.4.
+
+    Parameters
+    ----------
+    eig_max: float
+        Largest absolute eigenvalue of the constraint coupling matrix (> 0).
+
+    Returns
+    -------
+    int or None
+        Estimated LINCS order, or None if eig_max >= 1, in which case the
+        LINCS expansion does not converge for any order.
+    '''
+    if eig_max >= 1:
+        return None
+    return int(np.log(0.4**4)/np.log(eig_max))
+
 def report_constraint_coupling(u, block, estimate_lincs=False):
     '''
     Function to check the constraint coupling of a molecule.
@@ -121,20 +143,27 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
             print(f"[ Constraint Coupling Report for {block.name} ]\nNo constraints coupling detected.\n")
         return
 
-    # ESTIMATE LINCS ORDER:
-    lincs_order = int(np.log(0.4**4)/np.log(eig_max))
+    lincs_order = estimate_lincs_order(eig_max)
     threshold = 0.8
 
-    if estimate_lincs or eig_max > threshold:
+    if estimate_lincs or eig_max >= threshold:
         with open(DATA_PATH/'citations.bib') as citation_file:
             ff_citations = read_bib(citation_file)
         buff = '\n'
         buff += f"[ Constraint Coupling Report for {{molname}} ]\n"
-        if eig_max >= threshold:
+        if lincs_order is None:
+            buff += ("WARNING: Constraint coupling eigenvalue >= 1, the LINCS expansion "
+                     "will not converge for any lincs-order!\n"
+                     "         Constraints will not be satisfied accurately, "
+                     "change your bonded network!\n\n")
+        elif eig_max >= threshold:
             buff += "WARNING: High constraint coupling detected, consider changing your bonded network!\n\n"
 
         buff += f"Largest eigenvalue: {{eig_max:.2f}}"
-        buff += f"\nEstimated LINCS order: {{lincs_order}}\n\n"
+        if lincs_order is None:
+            buff += "\nEstimated LINCS order: none (LINCS does not converge)\n\n"
+        else:
+            buff += f"\nEstimated LINCS order: {{lincs_order}}\n\n"
         buff += "For more information see:\n"
         citations = {'cholesterol_constraints'}
         citation_map = ChainMap(ff_citations, COMMON_CITATIONS)
