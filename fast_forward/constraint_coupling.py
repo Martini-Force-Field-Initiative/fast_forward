@@ -1,39 +1,41 @@
 from . import DATA_PATH
+from .itp_to_ag import find_mol_indices
 import numpy as np
 from vermouth.data import COMMON_CITATIONS
 from vermouth.citation_parser import citation_formatter, read_bib
 from collections import ChainMap
 
 
-def compute_coupling(u, constraints):
+def compute_coupling(constraints, masses, positions):
     '''
     Function to calculate the constraint coupling matrix A used in the LINCS algorithm.
     Adopted from https://github.com/bio-phys/constraint-coupling-analysis
 
     Parameters
     ----------
-    u: :class:`~MDAnalysis.core.universe.Universe`
     constraints: list
-        List of constraints in the system
+        List of (atom_a, atom_b) tuples, one per constraint. Atom keys
+        are arbitrary hashable identifiers used to look up `masses`
+        and `positions`.
+    masses: dict
+        Mass of each atom, keyed by atom.
+    positions: dict
+        Position (array of shape (3,)) of each atom, keyed by atom.
 
     Returns
     -------
     A: :class:`~numpy.ndarray`
         Constraint coupling matrix
     '''
-    
-    # sort the constraint list
-    for c in constraints:
-        if c.atoms[0] > c.atoms[1]:
-            c.atoms[0], c.atoms[1] = c.atoms[1], c.atoms[0]
-    constraints = sorted(constraints, key=lambda x: (x.atoms[0], x.atoms[1]))
+    # sort the constraint list (without modifying the input)
+    constraints = sorted(tuple(sorted(c)) for c in constraints)
 
     n_con = len(constraints)
-    Sdiag = [np.sqrt(1/u.atoms[c.atoms[0]].mass +1/u.atoms[c.atoms[1]].mass) for c in constraints]
+    Sdiag = [np.sqrt(1/masses[a] + 1/masses[b]) for a, b in constraints]
     Sdiag_inv = [1/elem for elem in Sdiag]
 
     # normalized constraint direction vectors
-    B = np.array([u.atoms[c.atoms[0]].position - u.atoms[c.atoms[1]].position for c in constraints])
+    B = np.array([np.asarray(positions[a]) - np.asarray(positions[b]) for a, b in constraints])
     B = np.array([v/np.linalg.norm(v) for v in B])
 
     # CONSTRAINT COUPLING MATRIX
@@ -43,19 +45,19 @@ def compute_coupling(u, constraints):
     for i,c1 in enumerate(constraints):
         for j,c2 in enumerate(constraints):
             # find the common atom between the two constraints
-            common = set(tuple(c1.atoms)) & set(tuple(c2.atoms))
+            common = set(c1) & set(c2)
             if len(common) != 1: # coupling is zero if no identical atoms of if constraints are identical
                 continue
-            common = common.pop() # convert set to int
-            
+            common = common.pop()
+
             # signs
-            if (c1.atoms[0] == c2.atoms[0]) or (c1.atoms[1] == c2.atoms[1]):
+            if (c1[0] == c2[0]) or (c1[1] == c2[1]):
                 sign = -1
             else:
                 sign = +1
 
             # mass factor
-            invmass = 1/u.atoms[common].mass
+            invmass = 1/masses[common]
             mass_factor[i,j] = sign * (invmass*Sdiag_inv[i]*Sdiag_inv[j])
 
             # constraint couplings
@@ -67,8 +69,16 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
     Function to check the constraint coupling of a molecule.
     Will print a warning if the constraint coupling is high.
 
+    Masses are taken from the block (i.e. the topology that is written out),
+    falling back to the universe masses for atoms without a mass in the block.
+    Positions are taken from the first molecule of type `block.name` in the
+    universe at the current frame.
+
     Parameters
     ----------
+    u: :class:`~MDAnalysis.core.universe.Universe`
+        Universe containing the molecule(s); must have molecule types
+        (e.g. via :func:`~fast_forward.itp_to_ag.res_as_mol`).
     block: :class:`~vermouth.molecule.Block`
         Block containing the molecule of interest.
     estimate_lincs: bool
@@ -82,7 +92,20 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
         if estimate_lincs:
             print(f"[ Constraint Coupling Report for {block.name} ]\nNo constraints coupling detected.\n")
         return
-    A = compute_coupling(u, constraints)
+
+    pairs = [tuple(c.atoms) for c in constraints]
+    nodes = sorted({atom for pair in pairs for atom in pair})
+    # map block atoms onto the universe indices of the first molecule of this type
+    univ_indices = find_mol_indices(u, nodes, block.name)[0]
+    node_to_univ = dict(zip(nodes, univ_indices))
+
+    positions = {node: u.atoms[idx].position for node, idx in node_to_univ.items()}
+    masses = {}
+    for node, idx in node_to_univ.items():
+        mass = block.nodes[node].get('mass')
+        masses[node] = float(mass) if mass is not None else u.atoms[idx].mass
+
+    A = compute_coupling(pairs, masses, positions)
 
     # check if A contains inf or nan
     if np.isnan(A).any() or np.isinf(A).any():
