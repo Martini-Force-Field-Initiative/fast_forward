@@ -27,15 +27,15 @@ def _is_part_of_dihedral(angle_atoms, dihedrals):
     bool
         True if angle is part of a dihedral, False otherwise
     """
-    match = False
     for dih in dihedrals:
-        match = (
+        if (
             np.array_equal(angle_atoms, dih[0:3]) or
             np.array_equal(angle_atoms, dih[1:4]) or
             np.array_equal(angle_atoms[::-1], dih[0:3]) or
             np.array_equal(angle_atoms[::-1], dih[1:4])
-        )
-    return match
+        ):
+            return True
+    return False
 
 def _gaussian_fitter(x, y, initial_center, initial_sigma, initial_amplitude):
     """
@@ -242,17 +242,24 @@ class InteractionFitter:
         x = np.linspace(-np.pi, np.pi, 360)
         y = data.T[1]
 
-        # take care of periodic effects for improper dihedrals
-        x_gauss = np.linspace(-2*np.pi, 2*np.pi, 720)
-        y_gauss = np.tile(y, 2)
+        # take care of periodic effects for improper dihedrals: lay out three
+        # periods of the data on their own bin centers and fit within one
+        # period around the peak, so a peak at the +-180 wrap stays whole.
+        # The peak is the circular mean, which noisy, sparse data doesn't
+        # throw off the way the highest bin can.
+        x_bins = np.radians(data.T[0])
+        peak = np.arctan2(np.sum(y * np.sin(x_bins)), np.sum(y * np.cos(x_bins)))
+        x_gauss = np.concatenate([x_bins - 2*np.pi, x_bins, x_bins + 2*np.pi])
+        y_gauss = np.tile(y, 3)
+        window = np.abs(x_gauss - peak) <= np.pi
 
         # first try fitting a gaussian to the data in case we have an improper dihedral
-        gaussian_result = _gaussian_fitter(x_gauss[120:-120],
-                                           y_gauss[120:-120],
-                                           initial_center=dict(value=x[y.argmax()],
-                                                               min=-np.pi,
-                                                               max=np.pi),
-                                           initial_sigma=dict(value=1,
+        gaussian_result = _gaussian_fitter(x_gauss[window],
+                                           y_gauss[window],
+                                           initial_center=dict(value=peak,
+                                                               min=peak - np.pi/2,
+                                                               max=peak + np.pi/2),
+                                           initial_sigma=dict(value=0.5,
                                                               min=0,
                                                               max=np.pi/3),
                                            initial_amplitude=dict(value=y.max())
@@ -311,7 +318,7 @@ class InteractionFitter:
                                                                                                             x)}
 
         else:
-            # transform the centre back into the correct domain after fitting to account for periodicity.
+            # bring the centre back into [-pi, pi)
             c0 = (gaussian_result.params['center'].value + np.pi) % (2*np.pi) - np.pi
 
             center = np.round(c0, self.precision)
