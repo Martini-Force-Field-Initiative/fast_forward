@@ -352,6 +352,65 @@ def test_wvs_not_a_number_raises():
         _resolve_cg_match(cgs_str, mol)
 
 
+def _vs_weights_by_name(cgs_str):
+    """Resolve a string; return {VS fragname: {element: weights}} for all VS."""
+    mol = MoleculeResolver.from_string(cgs_str, last_all_atom=True).resolve()[1]
+    cg, _, _ = _resolve_cg_match(cgs_str, mol)
+    out = {}
+    for bead in cg.nodes:
+        if cg.nodes[bead]["fragname"] not in ("U", "V"):
+            continue
+        weights = {}
+        for _, data in sorted(cg.nodes[bead]["graph"].nodes(data=True)):
+            weights.setdefault(data["element"], []).append(float(data["weight"]))
+        out[cg.nodes[bead]["fragname"]] = weights
+    return out
+
+
+def test_wvs_per_vs_name():
+    """wVS_<name> sets the weight for that VS only; wVS is the default for others."""
+    vs = _vs_weights_by_name(
+        r"{[#U].[#C].[#V]}.{#C=[N;wVS=0;wVS_V=1][C;wVS=1;wVS_V=0]}")
+    # U uses wVS: VS on the CH3 group
+    assert vs["U"] == {"N": [0.0], "C": [1.0], "H": [0.0, 0.0, 1.0, 1.0, 1.0]}
+    # V uses wVS_V: VS on the NH2 group; hydrogens inherit the specific key
+    assert vs["V"] == {"N": [1.0], "C": [0.0], "H": [1.0, 1.0, 0.0, 0.0, 0.0]}
+
+
+def test_wvs_per_vs_name_falls_back_to_w():
+    """An atom with only wVS_<name> uses w for other virtual sites."""
+    vs = _vs_weights_by_name(r"{[#U].[#C].[#V]}.{#C=N[C;w=0.3;wVS_V=0]}")
+    assert vs["U"] == {"N": [1.0], "C": [0.3], "H": [1.0, 1.0, 0.3, 0.3, 0.3]}
+    assert vs["V"] == {"N": [1.0], "C": [0.0], "H": [1.0, 1.0, 0.0, 0.0, 0.0]}
+
+
+def test_wvs_own_annotation_beats_inherited():
+    """A hydrogen's own wVS wins over its heavy atom's wVS_<name>."""
+    vs = _vs_weights_by_name(r"{[#C].[#V]}.{#C=N[C;wVS_V=0.5][H;wVS=2]}")
+    assert vs["V"] == {"N": [1.0], "C": [0.5], "H": [2.0, 1.0, 1.0, 0.5, 0.5]}
+
+
+def test_wvs_per_vs_name_not_a_number_raises():
+    cgs_str = r"{[#C].[#U]}.{#C=N[C;wVS_U=x]}"
+    mol = MoleculeResolver.from_string(cgs_str, last_all_atom=True).resolve()[1]
+    with pytest.raises(ValueError, match="wVS_U='x'.*not a number"):
+        _resolve_cg_match(cgs_str, mol)
+
+
+def test_wvs_unknown_vs_name_warns(capsys):
+    """A wVS_<name> without a bonded VS of that name is ignored with a warning."""
+    vs = _vs_weights_by_name(r"{[#C].[#U]}.{#C=N[C;wVS_X=0]}")
+    assert vs["U"] == {"N": [1.0], "C": [1.0], "H": [1.0] * 5}
+    out = capsys.readouterr().out
+    assert out.count("WARNING") == 1
+    assert "wVS_X" in out
+
+
+def test_wvs_known_vs_name_no_warning(capsys):
+    _vs_weights_by_name(r"{[#C].[#U]}.{#C=N[C;wVS_U=0]}")
+    assert "WARNING" not in capsys.readouterr().out
+
+
 def test_check_contiguous_residues_rejects_split_residues():
     """Beads of one residue that are not contiguous are rejected."""
     cg, _, _ = _resolve_cg_match(PEO_3LEVEL.format(n=1), _capped_peo(1))

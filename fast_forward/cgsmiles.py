@@ -175,39 +175,80 @@ def get_mappings(cg, univ, _match, mappings):
     return mappings
 
 
-def _parse_wvs(bead_graph, atom):
+def _parse_wvs(bead_graph, atom, key='wVS'):
     """
-    Returns the ``wVS`` annotation of an atom as float, or None if it has none.
+    Returns the ``wVS`` annotation (or another annotation given by `key`,
+    e.g. ``wVS_TN6``) of an atom as float, or None if it has none.
     """
-    value = bead_graph.nodes[atom].get('wVS')
+    value = bead_graph.nodes[atom].get(key)
     if value is None:
         return None
     try:
         return float(value)
     except (TypeError, ValueError):
-        raise ValueError(f"wVS='{value}' of atom {bead_graph.nodes[atom].get('element')} "
+        raise ValueError(f"{key}='{value}' of atom {bead_graph.nodes[atom].get('element')} "
                          "is not a number.") from None
 
 
-def _vs_weight(bead_graph, atom):
+def _own_wvs(bead_graph, atom, vs_name):
     """
-    Weight of an atom of a parent bead when it is used for a virtual site.
+    The wVS of an atom for the virtual site `vs_name` from its own
+    annotations: ``wVS_<vs_name>`` if given, else ``wVS``, else None.
+    """
+    wvs = _parse_wvs(bead_graph, atom, f'wVS_{vs_name}')
+    if wvs is None:
+        wvs = _parse_wvs(bead_graph, atom)
+    return wvs
 
-    Mirrors how cgsmiles treats w: the atom's own w if given;
-    for a hydrogen without one, the wVS of the heavy atom it is bonded
-    to; otherwise the atom's normal mapping weight (w, default 1).
+
+def _vs_weight(bead_graph, atom, vs_name):
     """
-    wvs = _parse_wvs(bead_graph, atom)
-    
+    Weight of an atom of a parent bead when it is used for the virtual
+    site with fragment name `vs_name`.
+
+    Mirrors how cgsmiles treats w. The first of these that is given wins:
+
+    1. the atom's own ``wVS_<vs_name>``
+    2. the atom's own ``wVS``
+    3. for a hydrogen: 1. and 2. of the heavy atom it is bonded to
+    4. the atom's normal mapping weight (w, default 1)
+    """
+    wvs = _own_wvs(bead_graph, atom, vs_name)
+
     if wvs is None and bead_graph.nodes[atom].get('element') == 'H':
         for anchor in bead_graph.neighbors(atom):
             if bead_graph.nodes[anchor].get('element') != 'H':
-                wvs = _parse_wvs(bead_graph, anchor)
+                wvs = _own_wvs(bead_graph, anchor, vs_name)
                 break
-   
+
     if wvs is None:
         return bead_graph.nodes[atom].get('weight', 1.0)
     return wvs
+
+
+def _warn_unused_wvs_keys(cg_graph, vs_nodes):
+    """
+    Prints a warning for every ``wVS_<name>`` annotation on the atoms of a
+    bead that does not border a virtual site with fragment name <name>,
+    since such an annotation (e.g. a typo) has no effect.
+    """
+    reported = set()
+    for bead in cg_graph.nodes:
+        if bead in vs_nodes:
+            continue
+        vs_names = {cg_graph.nodes[neigh].get('fragname')
+                    for neigh in cg_graph.neighbors(bead) if neigh in vs_nodes}
+        fragname = cg_graph.nodes[bead].get('fragname')
+        for _, data in cg_graph.nodes[bead]['graph'].nodes(data=True):
+            for key in data:
+                if not key.startswith('wVS_') or key[len('wVS_'):] in vs_names:
+                    continue
+                if (fragname, key) in reported:
+                    continue
+                reported.add((fragname, key))
+                print(f"WARNING - bead {fragname} has an atom annotated with {key}, "
+                      f"but no virtual site named {key[len('wVS_'):]} is bonded to it; "
+                      "the annotation is ignored.")
 
 
 def _annotate_vs(cg_graph):
@@ -223,6 +264,11 @@ def _annotate_vs(cg_graph):
     the wVS atom annotation if given (e.g. [C;w=1;wVS=0]), which
     hydrogens inherit from their heavy atom just like w; otherwise it
     is the normal mapping weight.
+    If several virtual sites are built on the same bead, an atom can set
+    its weight for one of them with ``wVS_<name>``, where <name> is the
+    fragment name of the virtual site (e.g. [C;wVS=0;wVS_TN6=1]). It takes
+    precedence over ``wVS``, which then acts as the default for the other
+    virtual sites.
     An atom that is shared between several neighboring beads (e.g. ``w=0.5``
     in two beads) gets the sum of its weights, so it counts as much as an
     atom that belongs to one bead.
@@ -241,18 +287,20 @@ def _annotate_vs(cg_graph):
     # never used as parents, whatever order the nodes are processed in
     vs_nodes = {node for node in cg_graph.nodes
                 if len(cg_graph.nodes[node].get('graph', [])) == 0}
+    _warn_unused_wvs_keys(cg_graph, vs_nodes)
     for node in vs_nodes:
+        vs_name = cg_graph.nodes[node].get('fragname')
         parents = [neigh for neigh in cg_graph.neighbors(node) if neigh not in vs_nodes]
         if not parents:
             raise ValueError(
-                f"Virtual site {cg_graph.nodes[node].get('fragname')} (bead {node}) "
+                f"Virtual site {vs_name} (bead {node}) "
                 "is not bonded to any bead with atoms, so its position is undefined."
             )
         g = nx.Graph()
         for neigh in parents:
             bead_graph = cg_graph.nodes[neigh]['graph']
             for atom, data in bead_graph.nodes(data=True):
-                weight = _vs_weight(bead_graph, atom)
+                weight = _vs_weight(bead_graph, atom, vs_name)
                 if atom in g:
                     g.nodes[atom]['weight'] += weight
                 else:
@@ -492,7 +540,7 @@ def _check_bead_weights(cg, mol_name):
             raise ValueError(
                 f"The atom weights of bead {cg.nodes[bead]['fragname']} (bead {bead}) "
                 f"in molecule {mol_name} sum to {total}, so its position is undefined. "
-                "Check the w and wVS annotations."
+                "Check the w, wVS and wVS_<name> annotations."
             )
 
 
