@@ -387,7 +387,7 @@ class InteractionFitter:
                                                                            meta={"comment": group_name}))
                     else:
                         self.interactions_dict['bonds'].append(Interaction(atoms=list(ag),
-                                                                           parameters=[1, center, 10000],
+                                                                           parameters=[1, center, self.constraint_converter],
                                                                            meta={"ifdef": "FLEXIBLE",
                                                                                  "comment": group_name}))
                         self.interactions_dict['constraints'].append(Interaction(atoms=list(ag),
