@@ -169,13 +169,17 @@ class InteractionFitter:
 
         """
         x, y = data.T
+        # spread of the distribution itself; x spans the whole histogram range
+        # (0-180), so x.std() would be ~52 deg regardless of the data
+        mean = np.average(x, weights=y)
+        std = np.sqrt(np.average((x - mean) ** 2, weights=y))
         gaussian_fit = _gaussian_fitter(x, y,
                                         initial_center=dict(value=x[y.argmax()],
                                                             min=x[y.argmax()] - 20,
                                                             max=x[y.argmax()] + 20),
-                                        initial_sigma=dict(value=x.std(),
-                                                           min=x.std() / 4,
-                                                           max=x.std() * 1.5),
+                                        initial_sigma=dict(value=std,
+                                                           min=std / 4,
+                                                           max=std * 1.5),
                                         initial_amplitude=dict(value=y.max(), min=0)
                                         )
 
