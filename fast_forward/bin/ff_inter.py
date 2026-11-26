@@ -75,6 +75,9 @@ def main():
                         dest="plot_data", help="Save a pickle file containing the input data for the plots")
     parser.add_argument('-constraints', dest='constraint_convert', default=10000, type=int,
                         help="Force constant above which to convert bonds to constraints")
+    parser.add_argument('-max-angle-fc', dest='max_angle_fc', default=600, type=float,
+                        help="Maximum force constant (kJ/mol/rad^2) for angles; larger fitted values are capped. "
+                             "Fitted values above 250 (or above the cap, if lower) raise a warning")
     parser.add_argument('-temperature', dest='temperature', type=int, default=310,
                         help='Temperature to use in Boltzmann inversion')
     parser.add_argument('-precision', dest='precision', default=3, type=int,
@@ -111,7 +114,8 @@ def main():
                                    max_dihedrals=args.max_dihedral,
                                    temperature=args.temperature,
                                    precision=args.precision,
-                                   dihedral_scaling=args.dihedral_scaling)
+                                   dihedral_scaling=args.dihedral_scaling,
+                                   max_angle_fc=args.max_angle_fc)
         
         interaction_mapper = ITPInteractionMapper(u, ff.blocks.values(), ff.blocks.keys())
         # loop over molecules

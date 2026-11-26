@@ -19,3 +19,34 @@ def test_angle_force_constant_has_no_sin_term(theta0, sigma_deg):
     expected = fitter.kb * fitter.temperature / np.deg2rad(sigma_deg) ** 2
     assert center == pytest.approx(theta0, abs=0.1)
     assert k == pytest.approx(expected, rel=0.02)
+
+
+def _write_angle(fitter, k, capsys):
+    fitter.fit_parameters['angles']["A_B_C"] = [120.0, k]
+    fitter.fit_to_gmx('angles', "A_B_C", [[0, 1, 2]], vs_constructors=[])
+    return fitter.interactions_dict['angles'][-1].parameters[2], capsys.readouterr().out
+
+
+@pytest.mark.parametrize("max_fc, k, expected_k, warns", [
+    (150, 100, 100, False),    # below cap and warning threshold
+    (150, 200, 150, True),     # cap below 250: warn above the cap
+    (150, 150, 150, False),    # exactly at a cap below 250
+    (150, 400, 150, True),     # capped and above 250
+    (1000, 400, 400, True),    # not capped, still above 250
+    (1000, 250, 250, False),   # exactly at the threshold
+    (600, 700, 600, True),     # default cap
+])
+def test_angle_cap_and_warning(max_fc, k, expected_k, warns, capsys):
+    fitter = InteractionFitter(precision=3, temperature=300, constraint_converter=20000,
+                               max_dihedrals=1, dihedral_scaling=1, max_angle_fc=max_fc)
+    written_k, out = _write_angle(fitter, k, capsys)
+    assert written_k == expected_k
+    assert ("WARNING: Angle A_B_C" in out) is warns
+    if warns:
+        assert f"above {min(250, max_fc):g} kJ/mol/rad^2" in out
+
+
+def test_default_angle_cap():
+    fitter = InteractionFitter(precision=3, temperature=300, constraint_converter=20000,
+                               max_dihedrals=1, dihedral_scaling=1)
+    assert fitter.max_angle_fc == 600

@@ -11,6 +11,10 @@ import lmfit
 from collections import defaultdict
 from vermouth.molecule import Interaction
 
+# fitted angle force constants (kJ/mol/rad^2) above this (or above the cap, if lower) raise a warning
+ANGLE_FC_WARNING = 250
+
+
 def _is_part_of_dihedral(angle_atoms, dihedrals):
     """
     Check if an angle is part of a dihedral
@@ -98,7 +102,7 @@ class InteractionFitter:
     interactions_dict: defaultdict  # <-- Add this line
 
     def __init__(self, precision, temperature, constraint_converter,
-                 max_dihedrals, dihedral_scaling):
+                 max_dihedrals, dihedral_scaling, max_angle_fc=600):
         '''
 
         Parameters
@@ -111,6 +115,8 @@ class InteractionFitter:
             threshold above which to convert bonds to constraints
         max_dihedrals: int
             maximum number of dihedrals to fit proper dihedrals with
+        max_angle_fc: float
+            maximum force constant (kJ/mol/rad^2) written for angles; larger fitted values are capped
         '''
         self.__dihedrals = None
         self.precision = precision
@@ -119,6 +125,7 @@ class InteractionFitter:
         self.constraint_converter = constraint_converter
         self.max_dihedrals = max_dihedrals
         self.dihedral_scaling = dihedral_scaling
+        self.max_angle_fc = max_angle_fc
         # this will store the interactions
         self.interactions_dict = defaultdict(list)
         self.fit_parameters = defaultdict(dict)
@@ -406,8 +413,16 @@ class InteractionFitter:
             parameters = self.fit_parameters['angles'][group_name]
             center, sigma = parameters
 
-            # empirically derived. if sigma too big, angles get very unstable.
-            sigma = min(sigma, 150)
+            # stiff angles get unstable, so cap the force constant
+            fitted_fc = sigma
+            sigma = min(sigma, self.max_angle_fc)
+            # warn above 250, or above the cap if that is lower
+            warn_threshold = min(ANGLE_FC_WARNING, self.max_angle_fc)
+            if fitted_fc > warn_threshold:
+                capped = (f" Capped to {sigma:g} (-max-angle-fc)." if sigma < fitted_fc
+                          else " Lower the cap with -max-angle-fc if needed.")
+                print((f"WARNING: Angle {group_name} has a fitted force constant of {fitted_fc:.0f} kJ/mol/rad^2, "
+                       f"above {warn_threshold:g} kJ/mol/rad^2. Such stiff angles may cause instabilities.{capped}"))
             
             if _is_part_of_dihedral(atoms[0], self.dihedrals): # only assign type 10 if part of a dihedral and theta_0 < 160
                 if float(center) < 160: # empirically derived. For theta_0 > 160, significant ptl energy for type 10 at equilibrium, so enforce type 1.
