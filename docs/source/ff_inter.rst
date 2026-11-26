@@ -30,6 +30,9 @@ Options
   -plot-data            Save a pickle file containing the input data for the plots (default: False)
   -constraints CONSTRAINT_CONVERT
                         Force constant above which to convert bonds to constraints (default: 10000)
+  -max-angle-fc MAX_ANGLE_FC
+                        Maximum force constant (kJ/mol/rad^2) for angles; larger fitted values are capped. Fitted
+                        values above 250 (or above the cap, if lower) raise a warning (default: 600)
   -temperature TEMPERATURE
                         Temperature to use in Boltzmann inversion (default: 310)
   -precision PRECISION  Precision of variables written to itp (default: 3)
