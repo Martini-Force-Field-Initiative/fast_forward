@@ -380,10 +380,18 @@ class InteractionFitter:
             parameters = self.fit_parameters['bonds'][group_name]
             center, sigma = parameters
 
+            # bonds involving virtual site constructors cannot become
+            # constraints, so cap their force constant at the threshold
+            capped_fc = min(sigma, self.constraint_converter)
+            if sigma >= self.constraint_converter and any(x in vs_constructors for ag in atoms for x in ag):
+                print((f"WARNING: Bond {group_name} involves a virtual site constructor and cannot be "
+                       f"converted to a constraint. Capping its force constant from {sigma:.0f} "
+                       f"to {capped_fc}."))
+
             for ag in atoms:
                 if any(x in vs_constructors for x in ag):
                     self.interactions_dict['bonds'].append(Interaction(atoms=list(ag),
-                                                                       parameters=[1, center, sigma],
+                                                                       parameters=[1, center, capped_fc],
                                                                        meta={"comment": group_name}))
                 else:
                     if sigma < self.constraint_converter:
@@ -392,7 +400,7 @@ class InteractionFitter:
                                                                            meta={"comment": group_name}))
                     else:
                         self.interactions_dict['bonds'].append(Interaction(atoms=list(ag),
-                                                                           parameters=[1, center, 10000],
+                                                                           parameters=[1, center, self.constraint_converter],
                                                                            meta={"ifdef": "FLEXIBLE",
                                                                                  "comment": group_name}))
                         self.interactions_dict['constraints'].append(Interaction(atoms=list(ag),
