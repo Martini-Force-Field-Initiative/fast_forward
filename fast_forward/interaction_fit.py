@@ -187,9 +187,11 @@ class InteractionFitter:
         initial_sigma = gaussian_fit.params["sigma"].value
 
         center = np.round(initial_center, self.precision)
-        sin_term = np.sin(np.deg2rad(float(center))) ** 2
+        # Boltzmann inversion of a Gaussian in theta. Angles are written as
+        # type 1 (harmonic) or type 10 (restricted bending); both reduce to
+        # 1/2 k (theta - theta0)^2 near theta0, so k = RT / sigma^2.
         var = np.deg2rad(initial_sigma) ** 2
-        sigma = np.round((self.kb * self.temperature) / (sin_term * var), self.precision)
+        sigma = np.round((self.kb * self.temperature) / var, self.precision)
 
         self.fit_parameters['angles'][group_name] = [center, sigma]
 
