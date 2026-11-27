@@ -315,8 +315,6 @@ def test_report_maps_block_to_universe_indices_and_uses_block_masses(capsys):
     # sanity check: universe masses (all 72) would give 0.25
     assert expected != pytest.approx(0.25, abs=0.01)
     assert _reported_eigenvalue(out) == pytest.approx(expected, abs=0.005)
-    assert "1 from trajectory average" in out
-    assert "averaged over the trajectory: 1-2-3" in out
 
 
 def test_report_falls_back_to_universe_masses(capsys):
@@ -338,8 +336,6 @@ def test_report_uses_topology_without_trajectory(capsys):
     out = capsys.readouterr().out
     expected = _lambda_max(_coupling_from_positions(CHAIN_CONSTRAINTS, [36.0, 72.0, 54.0], CHAIN))
     assert _reported_eigenvalue(out) == pytest.approx(expected, abs=0.005)
-    assert "1 from angle term" in out
-    assert "trajectory" not in out
 
 
 def test_report_topology_preferred_over_trajectory(capsys):
@@ -363,6 +359,38 @@ def test_report_eigenvalue_above_one(capsys, estimate_lincs):
     assert "will not converge" in out
     assert "Estimated LINCS order: none" in out
     assert "Estimated LINCS order: -" not in out
+    # symmetric star: all four constraints contribute equally
+    assert "Constraints contributing most to the largest eigenvalue:" in out
+    for i in range(1, 5):
+        assert f"B0-B{i} (1-{i+1}): 25%" in out
+
+
+def test_report_dominant_constraints_names_culprits(capsys):
+    # high-coupling star (atoms 0-4) plus an isolated, weakly coupled chain (5-7)
+    block = _make_block(STAR_MASSES + [72.0] * 3,
+                        STAR_CONSTRAINTS + [(5, 6), (6, 7)])
+    for i in range(1, 5):
+        for j in range(i + 1, 5):
+            block.interactions['angles'].append(
+                Interaction(atoms=[i, 0, j], parameters=['1', '150', '25'], meta={}))
+    block.interactions['angles'].append(
+        Interaction(atoms=[5, 6, 7], parameters=['1', '120', '25'], meta={}))
+    report_constraint_coupling(None, block)
+    out = capsys.readouterr().out
+    assert "WARNING" in out
+    assert "B0-B1 (1-2)" in out
+    # the chain is not part of the dominant eigenvector
+    assert "B5-B6" not in out and "B6-B7" not in out
+
+
+def test_report_dominant_constraints_below_threshold(capsys):
+    u, block = _make_system([72.0] * 3, univ_mass=72.0)
+    report_constraint_coupling(u, block, estimate_lincs=True)
+    out = capsys.readouterr().out
+    assert "WARNING" not in out
+    assert "Constraints contributing most to the largest eigenvalue:" in out
+    assert "B0-B1 (1-2): 50%" in out
+    assert "B1-B2 (2-3): 50%" in out
 
 
 def test_report_eigenvalue_at_one(capsys):
@@ -377,9 +405,9 @@ def test_report_eigenvalue_at_one(capsys):
 
 
 @pytest.mark.parametrize('block_mass, univ_mass, bad', [
-    (0.0, 72.0, '2'),        # zero mass in the itp
-    (-1.0, 72.0, '2'),       # negative mass in the itp
-    (None, 0.0, '2'),        # no mass in the itp, zero in the universe
+    (0.0, 72.0, 'B1 (2)'),        # zero mass in the itp
+    (-1.0, 72.0, 'B1 (2)'),       # negative mass in the itp
+    (None, 0.0, 'B1 (2)'),        # no mass in the itp, zero in the universe
 ])
 def test_report_invalid_mass_warns(capsys, block_mass, univ_mass, bad):
     u, block = _make_system([36.0, 72.0, 54.0], univ_mass=univ_mass)
@@ -397,7 +425,7 @@ def test_report_missing_mass_without_trajectory_warns(capsys):
     block = _make_block([36.0, 72.0, 54.0], CHAIN_CONSTRAINTS)
     del block.nodes[2]['mass']
     report_constraint_coupling(None, block, estimate_lincs=True)
-    assert "atom(s) 3 are part of constraints" in capsys.readouterr().out
+    assert "atom(s) B2 (3) are part of constraints" in capsys.readouterr().out
 
 
 def test_report_molecule_not_in_trajectory_assumes_collinear(capsys):
@@ -407,8 +435,6 @@ def test_report_molecule_not_in_trajectory_assumes_collinear(capsys):
     out = capsys.readouterr().out
     # equal masses, |cos| = 1: (1/m) * (m/2) = 0.5
     assert _reported_eigenvalue(out) == pytest.approx(0.5, abs=0.005)
-    assert "assumed collinear" in out
-    assert "1-2-3" in out
 
 
 def test_report_coincident_atoms_does_not_crash(capsys):

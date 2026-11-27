@@ -292,9 +292,52 @@ def estimate_lincs_order(eig_max):
     return int(np.ceil(np.log(0.4**4)/np.log(eig_max) - 1e-9))
 
 
-def _format_triples(triples):
-    # 1-based atom numbers as in the itp
-    return ', '.join('-'.join(str(atom + 1) for atom in triple) for triple in triples)
+def _format_atoms(block, atoms):
+    """
+    Atom names joined by '-', followed by the 1-based atom numbers as in the
+    itp, e.g. 'C1-C2 (3-4)'. Atoms without a name are shown by number only.
+    """
+    numbers = '-'.join(str(atom + 1) for atom in atoms)
+    names = [block.nodes[atom].get('atomname') if atom in block.nodes else None
+             for atom in atoms]
+    if any(name is None for name in names):
+        return numbers
+    return f"{'-'.join(str(name) for name in names)} ({numbers})"
+
+
+def dominant_constraints(pairs, A, eig_max, min_fraction=0.1):
+    '''
+    Constraints that contribute most to the largest eigenvalue of the coupling
+    matrix, i.e. those with the largest weight in its eigenvector(s).
+
+    Parameters
+    ----------
+    pairs: list
+        Normalised constraints (see :func:`compute_coupling`), one per row of A.
+    A: :class:`~numpy.ndarray`
+        Constraint coupling matrix.
+    eig_max: float
+        Largest absolute eigenvalue of A.
+    min_fraction: float
+        Only constraints with at least this fraction of the largest weight
+        are returned.
+
+    Returns
+    -------
+    list
+        (constraint, weight) tuples sorted by decreasing weight; the weights
+        of all constraints sum to 1.
+    '''
+    eigvals, eigvecs = np.linalg.eigh(A)
+    # a degenerate largest eigenvalue has no unique eigenvector, so sum the
+    # weights over its whole eigenspace
+    top = np.abs(np.abs(eigvals) - eig_max) < 1e-6
+    weights = (eigvecs[:, top]**2).sum(axis=1)
+    weights /= weights.sum()
+    # round so that (numerically) equal weights are listed in constraint order
+    order = sorted(range(len(pairs)), key=lambda i: (-round(weights[i], 6), pairs[i]))
+    return [(pairs[i], weights[i]) for i in order
+            if weights[i] >= min_fraction * weights[order[0]]]
 
 
 def report_constraint_coupling(u, block, estimate_lincs=False):
@@ -347,7 +390,7 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
     bad_atoms = [node for node, mass in masses.items()
                  if not np.isfinite(mass) or mass <= 0]
     if bad_atoms:
-        atom_list = ', '.join(str(node + 1) for node in bad_atoms)
+        atom_list = ', '.join(_format_atoms(block, [node]) for node in bad_atoms)
         print(f"WARNING: cannot compute constraint coupling for {molname}: "
               f"atom(s) {atom_list} are part of constraints but have a zero, negative "
               "or missing mass.\n"
@@ -395,27 +438,15 @@ def report_constraint_coupling(u, block, estimate_lincs=False):
     elif eig_max >= threshold:
         lines += ["WARNING: High constraint coupling detected, consider changing "
                   "your bonded network!", '']
-
     lines.append(f"Largest eigenvalue: {eig_max:.2f}")
     if lincs_order is None:
         lines.append("Estimated LINCS order: none (LINCS does not converge)")
     else:
         lines.append(f"Estimated LINCS order: {lincs_order}")
 
-    # where the angles between coupled constraints came from
-    by_source = {}
-    for triple, (_, source) in resolved.items():
-        by_source.setdefault(source, []).append(triple)
-    order = [SOURCE_CONSTRAINTS, SOURCE_ANGLE, SOURCE_BOND, SOURCE_TRAJECTORY, SOURCE_ASSUMED]
-    lines.append("Angles between coupled constraints: " +
-                 ', '.join(f"{len(by_source[s])} from {s}" for s in order if s in by_source))
-    if SOURCE_TRAJECTORY in by_source:
-        lines.append(f"  not defined by the topology, averaged over the trajectory: "
-                     f"{_format_triples(sorted(by_source[SOURCE_TRAJECTORY]))}")
-    if SOURCE_ASSUMED in by_source:
-        lines.append(f"  NOTE: not defined by the topology or trajectory, assumed collinear "
-                     f"(|cos| = 1, likely an overestimate): "
-                     f"{_format_triples(sorted(by_source[SOURCE_ASSUMED]))}")
+    lines += ['', "Constraints contributing most to the largest eigenvalue:"]
+    lines += [f"  {_format_atoms(block, pair)}: {100 * weight:.0f}%"
+              for pair, weight in dominant_constraints(pairs, A, eig_max)]
 
     with open(DATA_PATH/'citations.bib') as citation_file:
         ff_citations = read_bib(citation_file)
