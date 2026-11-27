@@ -257,6 +257,60 @@ Constraints
 If the force constant of a bond is very high, it is usually better to convert it to
 a `constraint <https://manual.gromacs.org/documentation/current/reference-manual/algorithms/constraint-algorithms.html>`_.
 ``ff_inter`` sets this value to be 10,000 kJ/mol/nm^2 by default, but this can be changed using
-the ``-constraints`` argument. The ``-lincs`` argument can also be used to estimate the LINCS order for solving the
-constraints during the simulation.
+the ``-constraints`` argument.
+
+Constraint coupling
+-------------------
+
+GROMACS solves constraints with `LINCS <https://manual.gromacs.org/documentation/current/reference-manual/algorithms/constraint-algorithms.html#lincs>`_,
+which approximates the inverse of the constraint coupling matrix :math:`A` by a series expansion.
+How quickly this series converges is set by the largest absolute eigenvalue :math:`\lambda_{max}` of :math:`A`.
+Networks of coupled constraints, in particular fused triangles and rings, can lead to a large
+:math:`\lambda_{max}` and inaccurate or unstable constraints (see Fabian *et al.*, *J. Chem. Theory Comput.* 2023,
+`10.1021/acs.jctc.2c01032 <https://doi.org/10.1021/acs.jctc.2c01032>`_).
+
+After all files have been written, ``ff_inter`` therefore analyses the constraints of every molecule.
+Two constraints :math:`a{-}c` and :math:`c{-}b` that share an atom :math:`c` are coupled by
+
+.. math::
+
+ A_{ij} = -\frac{1}{m_c} S_i S_j \cos\theta_{acb}, \qquad S_i = \left(\frac{1}{m_a} + \frac{1}{m_c}\right)^{-1/2}
+
+so only the masses and the angles :math:`\theta_{acb}` between coupled constraints are needed. The masses are
+taken from the itp (falling back to the masses in the trajectory topology for atoms without a mass). The angles
+are taken from the topology where possible, in this order:
+
+1. **constraint triangle**: if :math:`a{-}b` is constrained as well, the angle follows exactly from the three
+   constraint lengths;
+2. **angle term**: the equilibrium angle :math:`\theta_0` of an angle :math:`a{-}c{-}b`;
+3. **closing bond**: the equilibrium length of a bond :math:`a{-}b`, together with the two constraint lengths.
+
+Angles that are not defined by the topology are averaged over all frames and all copies of the molecule in the
+trajectory, taking periodic boundary conditions into account. If the molecule is not present in the trajectory,
+such angles are assumed to be collinear (:math:`|\cos\theta| = 1`), which usually overestimates the coupling.
+The report lists how many angles came from each source, and which ones were taken from the trajectory or assumed.
+
+A report is always printed when :math:`\lambda_{max} \geq 0.8`. With the ``-lincs`` argument it is printed for
+every molecule with constraints, together with an estimate of the required ``lincs-order``:
+
+.. code-block:: text
+
+    [ Constraint Coupling Report for GSH ]
+    Largest eigenvalue: 0.48
+    Estimated LINCS order: 6
+    Angles between coupled constraints: 5 from angle term
+
+The estimated order is the smallest order :math:`n` for which :math:`\lambda_{max}^n \leq 0.4^4`, i.e. that reaches
+the accuracy of the GROMACS default (``lincs-order = 4``) for a typical eigenvalue of 0.4. This estimate is
+conservative: GROMACS internally doubles the expansion order for constraints in coupled triangles, and
+``lincs-iter`` corrects part of the remaining error, so the order needed in practice can be lower.
+
+If :math:`\lambda_{max} \geq 1`, the LINCS expansion does not converge for any order and the constraints will not be
+satisfied accurately. In this case a warning is printed and the bonded network should be changed, for example by
+replacing some constraints with stiff bonds or by removing redundant constraints.
+
+.. note::
+
+   The analysis uses equilibrium values from the topology. For soft angle terms the actual angle, and with it the
+   coupling, fluctuates during a simulation, as GROMACS recomputes :math:`A` at every step.
 
